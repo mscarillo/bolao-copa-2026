@@ -133,6 +133,22 @@ nav{background:var(--bg2);border-bottom:2px solid var(--green2);padding:0 28px;d
 .debug-box h5{font-size:11px;color:var(--gold);margin-bottom:6px;text-transform:uppercase;letter-spacing:1px}
 .debug-box pre{font-size:11px;color:var(--muted);max-height:160px;overflow-y:auto;white-space:pre-wrap;line-height:1.6}
 
+/* ── GABARITO MANUAL ── */
+.gab-panel{background:var(--bg2);border:1px solid var(--bd);border-radius:10px;padding:20px;margin-bottom:16px}
+.gab-panel-hd{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px}
+.gab-panel-title{font-family:var(--display);font-size:14px;color:var(--gold);letter-spacing:1px;display:flex;align-items:center;gap:8px}
+.gab-phase{font-family:var(--display);font-size:11px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin:14px 0 8px;padding-bottom:6px;border-bottom:1px solid var(--bd)}
+.gab-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:6px;margin-bottom:4px}
+.gab-row{display:grid;grid-template-columns:28px 1fr auto 1fr;align-items:center;gap:6px;background:var(--bg3);border-radius:6px;padding:6px 10px;font-size:12px}
+.gab-num{font-size:10px;color:var(--muted);font-weight:600;text-align:center}
+.gab-team{color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gab-team.right{text-align:right}
+.gab-score-inp{display:flex;align-items:center;gap:4px;justify-content:center}
+.gab-score-inp input{width:34px;background:var(--bg);border:1px solid var(--bd);border-radius:4px;color:var(--gold);font-size:13px;font-weight:700;text-align:center;padding:4px 2px;font-family:var(--display);outline:none}
+.gab-score-inp input:focus{border-color:var(--gold)}
+.gab-score-inp input.filled{border-color:var(--green2);background:#0d2018}
+.gab-vs{color:var(--muted);font-size:11px}
+.gab-saved{color:var(--green);font-size:11px;display:none}
 /* ── PONTUAÇÃO PAGE ── */
 .score-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
 .score-card{background:var(--bg2);border:1px solid var(--bd);border-radius:10px;padding:16px}
@@ -201,7 +217,7 @@ nav{background:var(--bg2);border-bottom:2px solid var(--green2);padding:0 28px;d
       <span id="apiBadgeText" style="color:var(--muted)">Aguardando</span>
     </div>
     <button class="icon-btn primary" id="refreshBtn" onclick="fetchResults()">
-      <span id="refreshIcon">⟳</span> Atualizar
+      <span id="refreshIcon">⟳</span> Buscar Resultados
     </button>
     <button class="icon-btn" id="pdfBtn" onclick="exportPDF()" title="Exportar ranking em PDF">⬇ PDF</button>
     <button class="icon-btn" onclick="openAdminModal()" id="loginBtn" title="Acesso admin">🔐</button>
@@ -286,9 +302,48 @@ nav{background:var(--bg2);border-bottom:2px solid var(--green2);padding:0 28px;d
     </div>
   </div>
 
-  <div style="background:var(--bg2);border:1px solid var(--bd);border-radius:10px;padding:16px">
-    <p style="font-size:12px;color:var(--muted);margin-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:.8px">Senha do admin</p>
-    <p style="font-size:12px;color:var(--muted);line-height:1.6">A senha atual está definida no código. Para alterá-la, edite a variável <code style="background:var(--bg3);padding:1px 5px;border-radius:3px;font-size:11px">ADMIN_PWD</code> no arquivo HTML antes de publicar no GitHub.</p>
+  <!-- GABARITO MANUAL -->
+  <div class="gab-panel">
+    <div class="gab-panel-hd">
+      <div class="gab-panel-title">⚽ GABARITO — Resultados dos Jogos</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <span class="gab-saved" id="gabSavedMsg">✓ Salvo!</span>
+        <button class="icon-btn primary" onclick="saveGabarito()" style="padding:6px 14px;font-size:12px">💾 Salvar gabarito</button>
+        <button class="icon-btn" onclick="clearGabarito()" style="font-size:11px">🗑 Limpar tudo</button>
+      </div>
+    </div>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.6">Digite os placares dos jogos já concluídos. Deixe em branco os jogos não disputados. Clique em <b>Salvar gabarito</b> e depois <b>Calcular Ranking</b>.</p>
+    <div id="gabContainer"></div>
+  </div>
+
+  <div style="background:var(--bg2);border:1px solid var(--gold);border-radius:10px;padding:18px;margin-bottom:16px">
+    <p style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.8px;color:var(--gold);margin-bottom:10px">📄 Como atualizar os resultados</p>
+    <p style="font-size:12px;color:var(--muted);line-height:1.7;margin-bottom:12px">
+      O site lê o arquivo <code style="background:var(--bg3);padding:1px 6px;border-radius:3px;color:var(--text)">resultados.json</code> do seu repositório GitHub. Para atualizar os placares, basta editar esse arquivo diretamente pelo site do GitHub — sem precisar de nada instalado.
+    </p>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <div style="background:var(--bg3);border-radius:7px;padding:12px 14px;font-size:12px;line-height:1.8;color:var(--muted)">
+        <b style="color:var(--text)">Passo 1 — Crie o arquivo na primeira vez</b><br>
+        No repositório GitHub: <b style="color:var(--text)">Add file → Create new file</b><br>
+        Nome: <code style="background:var(--bg);padding:1px 6px;border-radius:3px;color:var(--gold)">resultados.json</code><br>
+        Cole o conteúdo do modelo abaixo e clique <b style="color:var(--text)">Commit changes</b>.
+      </div>
+      <div style="background:var(--bg3);border-radius:7px;padding:12px 14px;font-size:12px;line-height:1.8;color:var(--muted)">
+        <b style="color:var(--text)">Passo 2 — Atualizar após cada jogo</b><br>
+        No repositório GitHub: clique em <b style="color:var(--text)">resultados.json → lápis (editar)</b><br>
+        Adicione o placar do jogo na lista e clique <b style="color:var(--text)">Commit changes</b>.<br>
+        O site atualiza em segundos ao clicar <b style="color:var(--text)">"Buscar Resultados"</b>.
+      </div>
+      <div style="background:var(--bg3);border-radius:7px;padding:12px 14px;font-size:12px;line-height:1.8;color:var(--muted)">
+        <b style="color:var(--text)">Passo 3 — Configure seu usuário no index.html</b><br>
+        Procure no arquivo: <code style="background:var(--bg);padding:1px 6px;border-radius:3px;color:var(--gold)">const GITHUB_USER = 'SEU_USUARIO';</code><br>
+        Troque <code style="color:var(--gold)">SEU_USUARIO</code> pelo seu usuário real do GitHub.
+      </div>
+    </div>
+    <div style="margin-top:12px;display:flex;gap:8px">
+      <button class="icon-btn primary" onclick="copyModeloJSON()" style="font-size:12px">📋 Copiar modelo resultados.json</button>
+      <span id="copiedMsg" style="font-size:12px;color:var(--green);align-self:center;display:none">✓ Copiado!</span>
+    </div>
   </div>
 </div>
 
@@ -389,61 +444,83 @@ function showPageById(id){
 }
 
 // ══════════════════════════════════════
-//  API FETCH
+//  BUSCA VIA CLAUDE (web_search)
+//  O botão "Atualizar" chama a API do
+//  Claude com ferramenta de busca web.
+//  Claude pesquisa os resultados, extrai
+//  os placares e devolve JSON estruturado.
+//  Sem depender de nenhuma API de futebol.
 // ══════════════════════════════════════
-const API_URL='https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json';
+
+// ══════════════════════════════════════
+//  CONFIGURAÇÃO — edite antes de publicar
+// ══════════════════════════════════════
+// Substitua pelos seus dados do GitHub:
+const GITHUB_USER = 'mscarillo';      // ex: 'joaosilva'
+const GITHUB_REPO = 'bolao-copa-2026';  // nome do repositório
+// O arquivo resultados.json fica na raiz do repositório
+// URL pública: https://raw.githubusercontent.com/USUARIO/REPO/main/resultados.json
+
+function getResultadosURL(){
+  return `https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/main/resultados.json?cb=${Date.now()}`;
+}
 
 async function fetchResults(){
   const btn=document.getElementById('refreshBtn');
   const icon=document.getElementById('refreshIcon');
   btn.disabled=true;
   icon.classList.add('spin');
-  setBadge(false,'Carregando…');
+  setBadge(false,'Carregando resultados…');
   try{
-    const r=await fetch(API_URL+'?cb='+Date.now());
+    const r = await fetch(getResultadosURL());
+    if(r.status===404) throw new Error('404 — arquivo resultados.json não encontrado no repositório');
     if(!r.ok) throw new Error('HTTP '+r.status);
-    const data=await r.json();
-    processAPI(data);
-    const played=Object.keys(gabResults).length;
-    setBadge(true, played>0?`${played} resultados`:'Jogos carregados');
+    const data = await r.json();
+    processResultados(data);
+    syncAPItoGab();
+    const played = Object.keys(gabResults).length;
+    const upd = data.atualizado_em ? ' • ' + new Date(data.atualizado_em).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '';
+    setBadge(true, played>0 ? `${played} resultados${upd}` : `Arquivo carregado — sem placares ainda${upd}`);
     if(players.length) calcRanking();
     if(document.getElementById('page-jogos').classList.contains('active')) renderJogos();
   }catch(e){
-    setBadge(false,'Falha na API');
-    showErr('Não foi possível carregar os resultados. ('+e.message+')');
+    setBadge(false,'Erro ao carregar');
+    if(e.message.includes('404')){
+      showErr('⚠️ resultados.json não encontrado. Crie o arquivo no repositório GitHub conforme as instruções na aba Admin.');
+    } else {
+      showErr('Erro ao carregar resultados: '+e.message);
+    }
   }finally{
     btn.disabled=false;
     icon.classList.remove('spin');
   }
 }
 
-function processAPI(data){
-  gabResults={};allMatches=[];
-  const GR=new Set([1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18].map(n=>'Matchday '+n));
-  const isGroup=m=>GR.has(m.round);
-  const groupMs=[...data.matches].filter(isGroup).sort((a,b)=>{
-    const da=new Date(a.date+'T00:00Z'),db=new Date(b.date+'T00:00Z');
-    if(da-db!==0) return da-db;
-    return parseInt(a.round.replace('Matchday',''))-parseInt(b.round.replace('Matchday',''));
-  });
-  let num=0;
-  for(const m of groupMs){
-    num++;
-    const e={num,team1:norm(m.team1),team2:norm(m.team2),date:m.date,group:m.group,round:m.round,phase:'Fase de Grupos'};
-    if(m.score1!=null&&m.score2!=null){e.a=m.score1;e.b=m.score2;gabResults[num]={a:m.score1,b:m.score2,team1:e.team1,team2:e.team2}}
-    allMatches.push(e);
+function processResultados(data){
+  gabResults = {};
+  allMatches = ALL_MATCHES_DEF.map(m=>({num:m.num, team1:m.t1, team2:m.t2, phase:m.phase}));
+  if(!data.jogos) return;
+  for(const j of data.jogos){
+    const n = parseInt(j.num);
+    if(!n || isNaN(n)) continue;
+    if(j.gols1 != null && j.gols2 != null){
+      gabResults[n] = {a:j.gols1, b:j.gols2, team1:j.time1||'', team2:j.time2||''};
+      // Para jogos do mata-mata: atualiza os nomes dos times no allMatches
+      const m = allMatches.find(x=>x.num===n);
+      if(m && j.time1 && !m.team1.includes(j.time1)){
+        m.team1 = j.time1; m.team2 = j.time2||m.team2;
+      }
+    }
   }
-  const KO={'Round of 32':1,'Round of 16':2,'Quarterfinal':3,'Quarterfinals':3,'Semifinal':4,'Semifinals':4,'Match for third place':5,'Third place':5,'Final':6};
-  const PH={'Round of 32':'Dezesseis Avos de Final','Round of 16':'Oitavas de Final','Quarterfinal':'Quartas de Final','Quarterfinals':'Quartas de Final','Semifinal':'Semifinal','Semifinals':'Semifinal','Match for third place':'Disputa do 3° Lugar','Third place':'Disputa do 3° Lugar','Final':'Final'};
-  const koMs=[...data.matches].filter(m=>!isGroup(m)).sort((a,b)=>{
-    const ra=KO[a.round]||99,rb=KO[b.round]||99;
-    return ra!==rb?ra-rb:new Date(a.date)-new Date(b.date);
-  });
-  for(const m of koMs){
-    const n=m.num||++num;
-    const e={num:n,team1:norm(m.team1)||m.team1,team2:norm(m.team2)||m.team2,date:m.date,round:m.round,phase:PH[m.round]||m.round};
-    if(m.score1!=null&&m.score2!=null){e.a=m.score1;e.b=m.score2;gabResults[n]={a:m.score1,b:m.score2,team1:e.team1,team2:e.team2}}
-    allMatches.push(e);
+  // Bônus finais
+  if(data.final){
+    gabFinal = {
+      champ:  data.final.campeao   || null,
+      vice:   data.final.vice      || null,
+      third:  data.final.terceiro  || null,
+      fourth: data.final.quarto    || null,
+      art:    data.final.artilheiro|| null,
+    };
   }
 }
 
@@ -744,8 +821,203 @@ function updateDebug(){
 }
 
 // ══════════════════════════════════════
+//  GABARITO MANUAL
+// ══════════════════════════════════════
+// All 104 matches with team names for the input grid
+const ALL_MATCHES_DEF = [
+  // PHASE 1 — Group Stage
+  {phase:'Fase de Grupos',num:1,t1:'México',t2:'África do Sul'},
+  {phase:'Fase de Grupos',num:2,t1:'Coréia do Sul',t2:'República Tcheca'},
+  {phase:'Fase de Grupos',num:3,t1:'República Tcheca',t2:'África do Sul'},
+  {phase:'Fase de Grupos',num:4,t1:'México',t2:'Coréia do Sul'},
+  {phase:'Fase de Grupos',num:5,t1:'República Tcheca',t2:'México'},
+  {phase:'Fase de Grupos',num:6,t1:'África do Sul',t2:'Coréia do Sul'},
+  {phase:'Fase de Grupos',num:7,t1:'Canadá',t2:'Bósnia e Herzegovina'},
+  {phase:'Fase de Grupos',num:8,t1:'Catar',t2:'Suíça'},
+  {phase:'Fase de Grupos',num:9,t1:'Suíça',t2:'Bósnia e Herzegovina'},
+  {phase:'Fase de Grupos',num:10,t1:'Canadá',t2:'Catar'},
+  {phase:'Fase de Grupos',num:11,t1:'Suíça',t2:'Canadá'},
+  {phase:'Fase de Grupos',num:12,t1:'Bósnia e Herzegovina',t2:'Catar'},
+  {phase:'Fase de Grupos',num:13,t1:'Brasil',t2:'Marrocos'},
+  {phase:'Fase de Grupos',num:14,t1:'Haiti',t2:'Escócia'},
+  {phase:'Fase de Grupos',num:15,t1:'Escócia',t2:'Marrocos'},
+  {phase:'Fase de Grupos',num:16,t1:'Brasil',t2:'Haiti'},
+  {phase:'Fase de Grupos',num:17,t1:'Escócia',t2:'Brasil'},
+  {phase:'Fase de Grupos',num:18,t1:'Marrocos',t2:'Haiti'},
+  {phase:'Fase de Grupos',num:19,t1:'Estados Unidos',t2:'Paraguai'},
+  {phase:'Fase de Grupos',num:20,t1:'Austrália',t2:'Turquia'},
+  {phase:'Fase de Grupos',num:21,t1:'Turquia',t2:'Paraguai'},
+  {phase:'Fase de Grupos',num:22,t1:'Estados Unidos',t2:'Austrália'},
+  {phase:'Fase de Grupos',num:23,t1:'Turquia',t2:'Estados Unidos'},
+  {phase:'Fase de Grupos',num:24,t1:'Paraguai',t2:'Austrália'},
+  {phase:'Fase de Grupos',num:25,t1:'Alemanha',t2:'Curaçau'},
+  {phase:'Fase de Grupos',num:26,t1:'Costa do Marfim',t2:'Equador'},
+  {phase:'Fase de Grupos',num:27,t1:'Alemanha',t2:'Costa do Marfim'},
+  {phase:'Fase de Grupos',num:28,t1:'Equador',t2:'Curaçau'},
+  {phase:'Fase de Grupos',num:29,t1:'Equador',t2:'Alemanha'},
+  {phase:'Fase de Grupos',num:30,t1:'Curaçau',t2:'Costa do Marfim'},
+  {phase:'Fase de Grupos',num:31,t1:'Holanda',t2:'Japão'},
+  {phase:'Fase de Grupos',num:32,t1:'Suécia',t2:'Tunísia'},
+  {phase:'Fase de Grupos',num:33,t1:'Tunísia',t2:'Japão'},
+  {phase:'Fase de Grupos',num:34,t1:'Holanda',t2:'Suécia'},
+  {phase:'Fase de Grupos',num:35,t1:'Japão',t2:'Suécia'},
+  {phase:'Fase de Grupos',num:36,t1:'Tunísia',t2:'Holanda'},
+  {phase:'Fase de Grupos',num:37,t1:'Bélgica',t2:'Egito'},
+  {phase:'Fase de Grupos',num:38,t1:'Irã',t2:'Nova Zelândia'},
+  {phase:'Fase de Grupos',num:39,t1:'Bélgica',t2:'Irã'},
+  {phase:'Fase de Grupos',num:40,t1:'Nova Zelândia',t2:'Egito'},
+  {phase:'Fase de Grupos',num:41,t1:'Egito',t2:'Irã'},
+  {phase:'Fase de Grupos',num:42,t1:'Nova Zelândia',t2:'Bélgica'},
+  {phase:'Fase de Grupos',num:43,t1:'Espanha',t2:'Cabo Verde'},
+  {phase:'Fase de Grupos',num:44,t1:'Arábia Saudita',t2:'Uruguai'},
+  {phase:'Fase de Grupos',num:45,t1:'Espanha',t2:'Arábia Saudita'},
+  {phase:'Fase de Grupos',num:46,t1:'Uruguai',t2:'Cabo Verde'},
+  {phase:'Fase de Grupos',num:47,t1:'Cabo Verde',t2:'Arábia Saudita'},
+  {phase:'Fase de Grupos',num:48,t1:'Uruguai',t2:'Espanha'},
+  {phase:'Fase de Grupos',num:49,t1:'França',t2:'Senegal'},
+  {phase:'Fase de Grupos',num:50,t1:'Iraque',t2:'Noruega'},
+  {phase:'Fase de Grupos',num:51,t1:'França',t2:'Iraque'},
+  {phase:'Fase de Grupos',num:52,t1:'Noruega',t2:'Senegal'},
+  {phase:'Fase de Grupos',num:53,t1:'Noruega',t2:'França'},
+  {phase:'Fase de Grupos',num:54,t1:'Senegal',t2:'Iraque'},
+  {phase:'Fase de Grupos',num:55,t1:'Argentina',t2:'Argélia'},
+  {phase:'Fase de Grupos',num:56,t1:'Áustria',t2:'Jordânia'},
+  {phase:'Fase de Grupos',num:57,t1:'Argentina',t2:'Áustria'},
+  {phase:'Fase de Grupos',num:58,t1:'Jordânia',t2:'Argélia'},
+  {phase:'Fase de Grupos',num:59,t1:'Argélia',t2:'Áustria'},
+  {phase:'Fase de Grupos',num:60,t1:'Jordânia',t2:'Argentina'},
+  {phase:'Fase de Grupos',num:61,t1:'Portugal',t2:'Rep. do Congo'},
+  {phase:'Fase de Grupos',num:62,t1:'Uzbequistão',t2:'Colômbia'},
+  {phase:'Fase de Grupos',num:63,t1:'Portugal',t2:'Uzbequistão'},
+  {phase:'Fase de Grupos',num:64,t1:'Colômbia',t2:'Rep. do Congo'},
+  {phase:'Fase de Grupos',num:65,t1:'Colômbia',t2:'Portugal'},
+  {phase:'Fase de Grupos',num:66,t1:'Rep. do Congo',t2:'Uzbequistão'},
+  {phase:'Fase de Grupos',num:67,t1:'Inglaterra',t2:'Croácia'},
+  {phase:'Fase de Grupos',num:68,t1:'Gana',t2:'Panamá'},
+  {phase:'Fase de Grupos',num:69,t1:'Inglaterra',t2:'Gana'},
+  {phase:'Fase de Grupos',num:70,t1:'Panamá',t2:'Croácia'},
+  {phase:'Fase de Grupos',num:71,t1:'Panamá',t2:'Inglaterra'},
+  {phase:'Fase de Grupos',num:72,t1:'Croácia',t2:'Gana'},
+  // PHASE 2 — Dezesseis Avos
+  ...Array.from({length:16},(_,i)=>({phase:'Dezesseis Avos de Final',num:73+i,t1:`Jogo ${73+i} - Time A`,t2:'Time B'})),
+  // PHASE 3 — Oitavas
+  ...Array.from({length:8},(_,i)=>({phase:'Oitavas de Final',num:89+i,t1:`Jogo ${89+i} - Time A`,t2:'Time B'})),
+  // PHASE 4 — Quartas
+  ...Array.from({length:4},(_,i)=>({phase:'Quartas de Final',num:97+i,t1:`Jogo ${97+i} - Time A`,t2:'Time B'})),
+  // PHASE 5 — Semis
+  {phase:'Semifinal',num:101,t1:'Jogo 101 - Time A',t2:'Time B'},
+  {phase:'Semifinal',num:102,t1:'Jogo 102 - Time A',t2:'Time B'},
+  // PHASE 6 — 3º lugar e Final
+  {phase:'Disputa do 3° Lugar',num:103,t1:'Jogo 103 - Time A',t2:'Time B'},
+  {phase:'Final',num:104,t1:'Jogo 104 - Time A',t2:'Time B'},
+];
+
+function renderGabContainer(){
+  const c=document.getElementById('gabContainer');
+  if(!c) return;
+  // Group by phase
+  const phases={};
+  for(const m of ALL_MATCHES_DEF)(phases[m.phase]=phases[m.phase]||[]).push(m);
+  let html='';
+  for(const[phase,ms] of Object.entries(phases)){
+    html+=`<div class="gab-phase">${phase}</div><div class="gab-grid">`;
+    for(const m of ms){
+      const g=gabResults[m.num]||{};
+      const vA=g.a!=null?g.a:'', vB=g.b!=null?g.b:'';
+      const fc=vA!==''?'filled':'';
+      html+=`<div class="gab-row">
+        <span class="gab-num">${m.num}</span>
+        <span class="gab-team">${m.t1}</span>
+        <div class="gab-score-inp">
+          <input type="number" min="0" max="30" id="ga${m.num}" value="${vA}" placeholder="-" class="${fc}" oninput="onGabInput(${m.num})">
+          <span class="gab-vs">×</span>
+          <input type="number" min="0" max="30" id="gb${m.num}" value="${vB}" placeholder="-" class="${fc}" oninput="onGabInput(${m.num})">
+        </div>
+        <span class="gab-team right">${m.t2}</span>
+      </div>`;
+    }
+    html+='</div>';
+  }
+  c.innerHTML=html;
+}
+
+function onGabInput(n){
+  const a=document.getElementById('ga'+n), b=document.getElementById('gb'+n);
+  if(!a||!b) return;
+  [a,b].forEach(el=>el.classList.toggle('filled',el.value!==''));
+}
+
+function saveGabarito(){
+  for(const m of ALL_MATCHES_DEF){
+    const a=document.getElementById('ga'+m.num), b=document.getElementById('gb'+m.num);
+    if(a&&b&&a.value!==''&&b.value!==''){
+      gabResults[m.num]={a:parseInt(a.value),b:parseInt(b.value),team1:m.t1,team2:m.t2};
+    } else {
+      delete gabResults[m.num];
+    }
+  }
+  const msg=document.getElementById('gabSavedMsg');
+  msg.style.display='inline';
+  setTimeout(()=>msg.style.display='none',2500);
+  setBadge(true,`${Object.keys(gabResults).length} resultados`);
+  if(players.length) calcRanking();
+}
+
+function clearGabarito(){
+  if(!confirm('Limpar todos os resultados do gabarito?')) return;
+  gabResults={};
+  renderGabContainer();
+  setBadge(false,'Gabarito limpo');
+}
+
+// Sync API results into gabarito inputs when API is loaded
+function syncAPItoGab(){
+  for(const[n,g] of Object.entries(gabResults)){
+    const a=document.getElementById('ga'+n), b=document.getElementById('gb'+n);
+    if(a&&b){a.value=g.a;b.value=g.b;a.classList.add('filled');b.classList.add('filled');}
+  }
+}
+
+// ══════════════════════════════════════
+//  MODELO JSON — copia para clipboard
+// ══════════════════════════════════════
+function copyModeloJSON(){
+  const modelo = {
+    "atualizado_em": new Date().toISOString().slice(0,16),
+    "jogos": [
+      {"num":1,"time1":"México","gols1":0,"time2":"África do Sul","gols2":0},
+      {"num":2,"time1":"Coréia do Sul","gols1":0,"time2":"República Tcheca","gols2":0}
+    ],
+    "final": {
+      "campeao": null,
+      "vice": null,
+      "terceiro": null,
+      "quarto": null,
+      "artilheiro": null
+    },
+    "_instrucoes": "Adicione cada jogo disputado na lista 'jogos'. Use os números sequenciais (1-72 fase de grupos, 73+ mata-mata). Atualize 'atualizado_em' com a data/hora atual. Para bônus finais, preencha o objeto 'final' ao fim do torneio."
+  };
+  const txt = JSON.stringify(modelo, null, 2);
+  navigator.clipboard.writeText(txt).then(()=>{
+    const msg = document.getElementById('copiedMsg');
+    msg.style.display='inline';
+    setTimeout(()=>msg.style.display='none', 2500);
+  }).catch(()=>{
+    // fallback
+    const ta = document.createElement('textarea');
+    ta.value = txt; document.body.appendChild(ta);
+    ta.select(); document.execCommand('copy');
+    document.body.removeChild(ta);
+    const msg = document.getElementById('copiedMsg');
+    msg.style.display='inline';
+    setTimeout(()=>msg.style.display='none', 2500);
+  });
+}
+
+// ══════════════════════════════════════
 //  INIT
 // ══════════════════════════════════════
+renderGabContainer();
 fetchResults();
 </script>
 </body>
