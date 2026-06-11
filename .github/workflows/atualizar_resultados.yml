@@ -1,0 +1,38 @@
+name: Atualizar Resultados Copa 2026
+
+on:
+  schedule:
+    # Roda a cada 10 minutos entre 12h e 23h UTC (9h-20h Brasília)
+    - cron: '*/10 12-23 * * *'
+  # Permite rodar manualmente pelo GitHub (botão Run workflow)
+  workflow_dispatch:
+
+jobs:
+  atualizar:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Baixar repositório
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Instalar dependências
+        run: pip install requests beautifulsoup4 lxml
+
+      - name: Buscar resultados
+        run: python scripts/buscar_resultados.py
+
+      - name: Salvar resultados.json
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add resultados.json
+          # Só faz commit se houve mudança
+          git diff --staged --quiet || git commit -m "chore: atualizar resultados $(date -u +'%Y-%m-%d %H:%M UTC')"
+          git push
