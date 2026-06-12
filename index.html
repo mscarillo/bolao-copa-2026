@@ -403,12 +403,23 @@ nav{
 <!-- ══ ADMIN ══ -->
 <div class="page" id="padmin">
 
-  <div class="infobox" id="cfgStatus">
-    ⚙️ Backend: <span id="cfgTxt" style="color:var(--red);font-weight:600">Não configurado</span>
+  <div class="infobox" id="cfgStatus" style="margin-bottom:8px">
+    ⚙️ Supabase: <span id="cfgTxt" style="color:var(--red);font-weight:600">Não configurado</span>
     &nbsp;·&nbsp;
-    <span style="cursor:pointer;color:var(--blue);text-decoration:underline" onclick="openOv('ovConfig')">Configurar Supabase</span>
+    <span style="cursor:pointer;color:var(--blue);text-decoration:underline" onclick="openOv('ovConfig')">Configurar</span>
     &nbsp;·&nbsp;
-    <span style="cursor:pointer;color:var(--text3);font-size:11px;text-decoration:underline" onclick="toggleSQL()">Ver SQL para criar tabelas</span>
+    <span style="cursor:pointer;color:var(--text3);font-size:11px;text-decoration:underline" onclick="toggleSQL()">Ver SQL</span>
+  </div>
+
+  <div style="background:var(--gold-l);border:1px solid var(--gold-t);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:#92400e;line-height:1.7;margin-bottom:12px">
+    ⚡ <b>Resultados automáticos via Claude AI:</b> Cole sua chave da API Anthropic para buscar resultados direto da web ao abrir o site (sem depender do robô GitHub).<br>
+    Obtenha grátis em <b>console.anthropic.com</b> → API Keys (5 USD de crédito incluído).<br>
+    <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
+      <input type="text" id="claudeKeyInput" placeholder="sk-ant-api03-..." 
+        style="flex:1;background:white;border:1px solid var(--gold-t);border-radius:5px;padding:6px 10px;font-size:12px;font-family:var(--fb);outline:none"
+        oninput="saveClaudeKey()">
+      <span id="claudeKeyStatus" style="font-size:11px;color:var(--green);white-space:nowrap"></span>
+    </div>
   </div>
 
   <div id="sqlBox" style="display:none;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--radius);padding:14px;margin-bottom:14px;font-size:12px;color:var(--text3);line-height:1.8;box-shadow:var(--shadow)">
@@ -461,6 +472,7 @@ nav{
 </div>
 
 <script>
+
 
 // ================================================================
 // CONFIGURACOES — EDITE AQUI ANTES DE PUBLICAR
@@ -626,6 +638,23 @@ function loadCfg(){
   sbUrl = localStorage.getItem('sb_url')||'';
   sbKey = localStorage.getItem('sb_key')||'';
   updateCfgStatus();
+  // Load Claude key if saved
+  const ck = localStorage.getItem('claude_key')||'';
+  if(ck){
+    // Inject into the CLAUDE_API_KEY variable at runtime
+    window._claudeKey = ck;
+    const inp = document.getElementById('claudeKeyInput');
+    if(inp) inp.value = ck;
+  }
+}
+function saveClaudeKey(){
+  const inp = document.getElementById('claudeKeyInput');
+  if(!inp) return;
+  const k = inp.value.trim();
+  localStorage.setItem('claude_key', k);
+  window._claudeKey = k;
+  const st = document.getElementById('claudeKeyStatus');
+  if(st) st.textContent = k ? '✅ Salvo' : '';
 }
 // Sync globals whenever needed
 function syncCfg(){
@@ -740,48 +769,156 @@ async function testConn(){
 
 
 // ── Load all ──────────────────────────────────────────────────────
+
+// ═══════════════════════════════════════════════════════════
+//  RESULTADOS VIA CLAUDE API (web_search)
+//  Busca placares reais da Copa diretamente da web ao abrir o site
+// ═══════════════════════════════════════════════════════════
+
+// ⚠️  Cole aqui sua chave da API Anthropic
+//     Obtenha grátis em console.anthropic.com (5 USD de crédito)
+//     Sem chave: resultados continuam vindo do Supabase (via robô GitHub Actions)
+const CLAUDE_API_KEY = '';   // ex: 'sk-ant-api03-...'
+
+const PROMPT_RESULTADOS = `Você é um extrator de dados de futebol.
+
+Busque na web os resultados OFICIAIS e FINALIZADOS dos jogos da Copa do Mundo FIFA 2026.
+Inclua APENAS jogos com placar definitivo (não inclua jogos ao vivo, futuros ou suspensos).
+
+Responda APENAS com JSON válido, sem markdown, sem texto extra:
+
+{
+  "jogos": [
+    {"num": 1, "time1": "México", "gols1": 0, "time2": "África do Sul", "gols2": 0},
+    {"num": 13, "time1": "Brasil", "gols1": 3, "time2": "Marrocos", "gols2": 1}
+  ],
+  "atualizado_em": "2026-06-12T18:00:00"
+}
+
+Use EXATAMENTE estes números de jogo (ordem cronológica da fase de grupos):
+1=México×África do Sul, 2=Coréia do Sul×Rep.Tcheca, 3=Rep.Tcheca×África do Sul,
+4=México×Coréia do Sul, 5=Rep.Tcheca×México, 6=África do Sul×Coréia do Sul,
+7=Canadá×Bósnia, 8=Catar×Suíça, 9=Suíça×Bósnia, 10=Canadá×Catar,
+11=Suíça×Canadá, 12=Bósnia×Catar, 13=Brasil×Marrocos, 14=Haiti×Escócia,
+15=Escócia×Marrocos, 16=Brasil×Haiti, 17=Escócia×Brasil, 18=Marrocos×Haiti,
+19=EUA×Paraguai, 20=Austrália×Turquia, 21=Turquia×Paraguai, 22=EUA×Austrália,
+23=Turquia×EUA, 24=Paraguai×Austrália, 25=Alemanha×Curaçau, 26=Costa do Marfim×Equador,
+27=Alemanha×Costa do Marfim, 28=Equador×Curaçau, 29=Equador×Alemanha, 30=Curaçau×Costa do Marfim,
+31=Holanda×Japão, 32=Suécia×Tunísia, 33=Tunísia×Japão, 34=Holanda×Suécia,
+35=Japão×Suécia, 36=Tunísia×Holanda, 37=Bélgica×Egito, 38=Irã×Nova Zelândia,
+39=Bélgica×Irã, 40=Nova Zelândia×Egito, 41=Egito×Irã, 42=Nova Zelândia×Bélgica,
+43=Espanha×Cabo Verde, 44=Arábia Saudita×Uruguai, 45=Espanha×Arábia Saudita,
+46=Uruguai×Cabo Verde, 47=Cabo Verde×Arábia Saudita, 48=Uruguai×Espanha,
+49=França×Senegal, 50=Iraque×Noruega, 51=França×Iraque, 52=Noruega×Senegal,
+53=Noruega×França, 54=Senegal×Iraque, 55=Argentina×Argélia, 56=Áustria×Jordânia,
+57=Argentina×Áustria, 58=Jordânia×Argélia, 59=Argélia×Áustria, 60=Jordânia×Argentina,
+61=Portugal×Rep.Congo, 62=Uzbequistão×Colômbia, 63=Portugal×Uzbequistão,
+64=Colômbia×Rep.Congo, 65=Colômbia×Portugal, 66=Rep.Congo×Uzbequistão,
+67=Inglaterra×Croácia, 68=Gana×Panamá, 69=Inglaterra×Gana, 70=Panamá×Croácia,
+71=Panamá×Inglaterra, 72=Croácia×Gana.
+Para mata-mata (jogos 73+) use os números na ordem em que foram disputados.
+Se não houver nenhum resultado ainda, retorne: {"jogos":[],"atualizado_em":""}`;
+
+async function fetchResultadosClaude(){
+  const _key = (CLAUDE_API_KEY && CLAUDE_API_KEY.trim()!=='') ? CLAUDE_API_KEY : (window._claudeKey||'');
+  if(!_key) return false;
+  console.log('[Claude] Buscando resultados via web_search...');
+  try{
+    const resp = await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{
+        'Content-Type':'application/json',
+        'x-api-key': _key,
+        'anthropic-version':'2023-06-01',
+        'anthropic-dangerous-direct-browser-access':'true'
+      },
+      body: JSON.stringify({
+        model:'claude-sonnet-4-5',
+        max_tokens:2000,
+        tools:[{type:'web_search_20250305',name:'web_search'}],
+        messages:[{role:'user',content:PROMPT_RESULTADOS}]
+      })
+    });
+    if(!resp.ok){
+      console.warn('[Claude] API error:', resp.status);
+      return false;
+    }
+    const data = await resp.json();
+    // Extrai texto da resposta (pode vir após blocos tool_use)
+    const textBlock = data.content?.find(b=>b.type==='text');
+    if(!textBlock){ console.warn('[Claude] No text block'); return false; }
+    let jsonStr = textBlock.text.trim()
+      .replace(/^```json\s*/,'').replace(/^```\s*/,'').replace(/\s*```$/,'').trim();
+    const parsed = JSON.parse(jsonStr);
+    if(!parsed.jogos || !parsed.jogos.length){ console.log('[Claude] No finished games yet'); return false; }
+    // Aplica resultados no gab local
+    let count = 0;
+    for(const j of parsed.jogos){
+      const n = parseInt(j.num);
+      if(!n || isNaN(n)) continue;
+      gab[n] = {a:j.gols1, b:j.gols2, t1:j.time1||'', t2:j.time2||''};
+      count++;
+    }
+    console.log(`[Claude] ${count} resultados carregados`);
+    return count > 0;
+  }catch(e){
+    console.warn('[Claude] Error:', e.message);
+    return false;
+  }
+}
+
 async function reloadAll(){
   syncCfg();
   const icon = document.getElementById('reficon');
   if(icon) icon.classList.add('spin');
   setBadge(false,'Carregando…');
   try{
-    // Load gab and players independently — one failing doesn't block the other
+    // 1. Carrega participantes e resultados do Supabase em paralelo
     const [gabOk, playersOk] = await Promise.allSettled([
       loadGab(),
       loadPlayers()
     ]);
+    if(gabOk.status==='rejected')     console.warn('[reload] loadGab:', gabOk.reason);
+    if(playersOk.status==='rejected') console.warn('[reload] loadPlayers:', playersOk.reason);
 
-    // Log errors for debugging
-    if(gabOk.status==='rejected')    console.warn('[reloadAll] loadGab failed:', gabOk.reason);
-    if(playersOk.status==='rejected') console.warn('[reloadAll] loadPlayers failed:', playersOk.reason);
-    console.log('[reloadAll] players:', players.length, '| gab:', Object.keys(gab).length);
+    // 2. Se Claude API configurada, busca resultados frescos da web
+    const hasClaudeKey = (CLAUDE_API_KEY&&CLAUDE_API_KEY.trim()!=='') || (window._claudeKey&&window._claudeKey.trim()!=='');
+    if(hasClaudeKey){
+      await fetchResultadosClaude().catch(e=>console.warn('[Claude]',e));
+    }
 
-    // Always render ranking (even with 0 results — shows participants)
+    // 3. Salva resultados atualizados no Supabase (para todos verem)
+    if(hasClaudeKey && Object.keys(gab).length>0){
+      const rows = Object.entries(gab).map(([n,g])=>({
+        jogo_num:parseInt(n), time1:g.t1, gols1:g.a,
+        time2:g.t2, gols2:g.b,
+        atualizado_em:new Date().toISOString()
+      }));
+      sbReq('POST','/resultados',rows).catch(e=>console.warn('[Supabase save]',e));
+    }
+
+    // 4. Renderiza
     calcRanking();
-
-    // Update jogos tab if active
     const pj = document.getElementById('pjogos');
     if(pj && pj.classList.contains('on')) renderJogos();
 
     const nRes = Object.keys(gab).length;
     const nPlayers = players.length;
-    if(!sbUrl||!sbKey){
-      setBadge(false,'Supabase não configurado — configure em Admin');
-    } else if(playersOk.status==='rejected'){
-      setBadge(false,'Erro ao carregar dados: '+playersOk.reason?.message);
+    console.log(`[reload] players:${nPlayers} gab:${nRes}`);
+
+    if(!sbUrl&&!sbKey&&!hasClaudeKey){
+      setBadge(false,'Configure Supabase ou Claude API em Admin');
     } else {
-      setBadge(true, nPlayers>0
-        ? `${nPlayers} participantes • ${nRes} resultados`
-        : 'Conectado — sem participantes ainda');
+      setBadge(true, `${nPlayers} participante(s) • ${nRes} resultado(s)`);
     }
   }catch(e){
-    console.error('[reloadAll]', e);
+    console.error('[reload]',e);
     setBadge(false,'Erro: '+e.message);
   }finally{
     if(icon) icon.classList.remove('spin');
   }
 }
+
 
 async function loadGab(){
   if(!sbUrl||!sbKey) return;
@@ -809,11 +946,7 @@ async function loadPlayers(){
   console.log('[loadPlayers] loaded', players.length, 'players');
 }
 
-async function loadAPIResults(){
-  // Frontend only uses Supabase results (saved by GitHub Actions robot)
-  // No direct API calls from frontend to avoid wrong match numbering
-  return;
-}
+
 
 // ── Save gabarito ─────────────────────────────────────────────────
 async function saveGab(){
@@ -1054,11 +1187,14 @@ async function uploadAll(){
 // ── Scoring ───────────────────────────────────────────────────────
 function scorePlayer(p){
   let mp=0,bp=0,ex=0,wg=0,win=0,gl=0,mc=0;
-  for(const[nStr,pm] of Object.entries(p.jogos)){
+  const jogos = p.jogos || {};
+  for(const[nStr,pm] of Object.entries(jogos)){
+    if(!pm) continue;
     const n=parseInt(nStr),real=gab[n];
     if(!real||real.a==null) continue;
     mc++;
-    const pA=pm.goalA,pB=pm.goalB,rA=real.a,rB=real.b;
+    const pA=Number(pm.goalA),pB=Number(pm.goalB),rA=Number(real.a),rB=Number(real.b);
+    if(isNaN(pA)||isNaN(pB)) continue;
     if(pA===rA&&pB===rB){mp+=S.EXACT;ex++}
     else{
       const pW=pA>pB?'A':pA<pB?'B':'D',rW=rA>rB?'A':rA<rB?'B':'D';
@@ -1068,8 +1204,10 @@ function scorePlayer(p){
       else if(hasG){mp+=S.GOAL;gl++}
     }
   }
-  return{nome:p.nome,contato:p.contato,mp,bp,total:mp+bp,mc,
-         mt:Object.keys(p.jogos).length,br:{ex,wg,win,gl},bonus:p.bonus||{}};
+  // Bonus — compare with gabFinal when Copa ends
+  const bon = p.bonus||{};
+  return{nome:p.nome,contato:p.contato||'',mp,bp,total:mp+bp,mc,
+         mt:Object.keys(jogos).length,br:{ex,wg,win,gl},bonus:bon};
 }
 
 // ── Ranking ───────────────────────────────────────────────────────
@@ -1270,7 +1408,9 @@ function showErr(msg){
 // ── Init ──────────────────────────────────────────────────────────
 loadCfg();
 reloadAll();
+// Auto-refresh a cada 5 minutos
 setInterval(reloadAll, 5*60*1000);
+
 
 </script>
 </body>
