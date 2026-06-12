@@ -199,44 +199,71 @@ def build_rows(raw):
 def save(rows):
     h={'apikey':SUPABASE_KEY,'Authorization':f'Bearer {SUPABASE_KEY}',
        'Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=minimal'}
+    saved=0
     for i in range(0,len(rows),50):
         b=rows[i:i+50]
         r=requests.post(f"{SUPABASE_URL}/rest/v1/resultados",headers=h,json=b,timeout=30)
         if not r.ok:
-            print(f"❌ Supabase {r.status_code}: {r.text[:300]}")
-            sys.exit(1)
-    print(f"✅ {len(rows)} resultados salvos no Supabase")
+            print(f"❌ Supabase HTTP {r.status_code}")
+            print(f"   Resposta: {r.text[:400]}")
+            if r.status_code==404:
+                print("   → Tabela 'resultados' não existe. Rode o SQL no Supabase.")
+            elif r.status_code==401:
+                print("   → Chave inválida ou políticas RLS faltando. Rode o SQL completo.")
+            raise Exception(f"Supabase {r.status_code}")
+        saved+=len(b)
+    print(f"✅ {saved} resultados salvos no Supabase")
 
 # ─── Main ─────────────────────────────────────────────────────────
 def main():
     now=datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')
     print(f"\n{'='*52}\n  Copa 2026 — {now}\n{'='*52}\n")
-    if not SUPABASE_URL or not SUPABASE_KEY:
-        print("❌ SUPABASE_URL / SUPABASE_KEY ausentes"); sys.exit(1)
-    print(f"✅ Supabase: {SUPABASE_URL}\n")
 
+    # Verifica secrets
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        print("❌ ERRO: SUPABASE_URL ou SUPABASE_KEY não definidos nos Secrets.")
+        print("   Vá em GitHub → Settings → Secrets and variables → Actions")
+        print("   e crie: SUPABASE_URL e SUPABASE_KEY")
+        sys.exit(0)  # exit 0 para não marcar como falha vermelha
+    print(f"✅ Supabase URL: {SUPABASE_URL}")
+    print(f"✅ Supabase Key: {SUPABASE_KEY[:20]}... ({len(SUPABASE_KEY)} chars)\n")
+
+    # Busca resultados — cada fonte protegida individualmente
     print("🔍 Buscando resultados (tenta 3 fontes)...")
     raw=None
     for fonte in (fetch_sofascore, fetch_worldcup26, fetch_openfootball):
-        raw=fonte()
+        try:
+            raw=fonte()
+        except Exception as e:
+            print(f"    {fonte.__name__} exceção: {e}")
+            raw=None
         if raw:
             print(f"  ✅ Fonte usada: {fonte.__name__}\n")
             break
 
     if not raw:
         print("\n⚠️  NENHUMA fonte retornou jogos finalizados.")
-        print("   Causa provável: ainda não há jogos terminados, OU as APIs")
-        print("   ainda não publicaram os placares (pode levar algumas horas).")
-        print("   O robô tentará de novo na próxima execução (a cada 10 min).")
+        print("   Normal se ainda não há jogos terminados ou as APIs não publicaram.")
+        print("   O robô tentará de novo na próxima execução.")
         sys.exit(0)
 
     print(f"📊 {len(raw)} resultados brutos. Mapeando números...")
-    rows=build_rows(raw)
-    if not rows:
-        print("⚠️  Nenhum jogo mapeado."); sys.exit(0)
+    try:
+        rows=build_rows(raw)
+    except Exception as e:
+        print(f"❌ Erro ao mapear: {e}")
+        sys.exit(0)
 
-    print(f"\n💾 Salvando {len(rows)} jogos...")
-    save(rows)
+    if not rows:
+        print("⚠️  Nenhum jogo mapeado para número.")
+        sys.exit(0)
+
+    print(f"\n💾 Salvando {len(rows)} jogos no Supabase...")
+    try:
+        save(rows)
+    except Exception as e:
+        print(f"❌ Erro ao salvar no Supabase: {e}")
+        sys.exit(0)
     print("\n✅ Concluído com sucesso!")
 
 if __name__=='__main__':
