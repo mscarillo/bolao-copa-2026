@@ -1,137 +1,195 @@
 #!/usr/bin/env python3
 """
-GitHub Actions — busca resultados da Copa 2026 e salva no Supabase.
+Busca resultados da Copa 2026 e salva no Supabase.
+A numeração dos jogos é FIXA e baseada no calendário oficial da FIFA.
 Fontes: worldcup26.ir → Sofascore → openfootball
-Secrets: SUPABASE_URL, SUPABASE_KEY
+Secrets GitHub: SUPABASE_URL, SUPABASE_KEY
 """
-import os, sys, json, requests
+import os, sys, requests
 from datetime import datetime, timezone
 
 SUPABASE_URL = os.environ.get('SUPABASE_URL','').rstrip('/')
 SUPABASE_KEY = os.environ.get('SUPABASE_KEY','')
 TIMEOUT = 20
 
-# ── Nomes em português ─────────────────────────────────────────────
-NM = {
-    'mexico':'México','south africa':'África do Sul',
-    'south korea':'Coréia do Sul','korea republic':'Coréia do Sul',
-    'czech republic':'República Tcheca','czechia':'República Tcheca',
-    'canada':'Canadá','bosnia and herzegovina':'Bósnia e Herzegovina',
-    'qatar':'Catar','switzerland':'Suíça','brazil':'Brasil',
-    'morocco':'Marrocos','haiti':'Haiti','scotland':'Escócia',
-    'usa':'Estados Unidos','united states':'Estados Unidos',
-    'paraguay':'Paraguai','australia':'Austrália',
-    'turkey':'Turquia','türkiye':'Turquia','germany':'Alemanha',
-    'curacao':'Curaçau','curaçao':'Curaçau',
-    "côte d'ivoire":'Costa do Marfim','ivory coast':'Costa do Marfim',
-    'ecuador':'Equador','netherlands':'Holanda','japan':'Japão',
-    'sweden':'Suécia','tunisia':'Tunísia','belgium':'Bélgica',
-    'egypt':'Egito','iran':'Irã','new zealand':'Nova Zelândia',
-    'spain':'Espanha','cape verde':'Cabo Verde',
-    'saudi arabia':'Arábia Saudita','uruguay':'Uruguai',
-    'france':'França','senegal':'Senegal','iraq':'Iraque',
-    'norway':'Noruega','argentina':'Argentina','algeria':'Argélia',
-    'austria':'Áustria','jordan':'Jordânia','portugal':'Portugal',
-    'dr congo':'Rep. do Congo','democratic republic of congo':'Rep. do Congo',
-    'uzbekistan':'Uzbequistão','colombia':'Colômbia',
-    'england':'Inglaterra','croatia':'Croácia','ghana':'Gana','panama':'Panamá',
+# ─── CALENDÁRIO OFICIAL FIFA — mapeamento fixo time1 × time2 → número do jogo
+# Fonte: tabela oficial divulgada pela FIFA em 06/06/2026
+# Grupos em ordem cronológica exata (mesma da planilha de palpites)
+GAME_MAP = {
+    # Jogo: (time1_lower, time2_lower) → num
+    # GRUPO A
+    ('méxico','áfrica do sul'): 1,
+    ('coréia do sul','república tcheca'): 2,
+    ('república tcheca','áfrica do sul'): 3,
+    ('méxico','coréia do sul'): 4,
+    ('república tcheca','méxico'): 5,
+    ('áfrica do sul','coréia do sul'): 6,
+    # GRUPO B
+    ('canadá','bósnia e herzegovina'): 7,
+    ('catar','suíça'): 8,
+    ('suíça','bósnia e herzegovina'): 9,
+    ('canadá','catar'): 10,
+    ('suíça','canadá'): 11,
+    ('bósnia e herzegovina','catar'): 12,
+    # GRUPO C
+    ('brasil','marrocos'): 13,
+    ('haiti','escócia'): 14,
+    ('escócia','marrocos'): 15,
+    ('brasil','haiti'): 16,
+    ('escócia','brasil'): 17,
+    ('marrocos','haiti'): 18,
+    # GRUPO D
+    ('estados unidos','paraguai'): 19,
+    ('austrália','turquia'): 20,
+    ('turquia','paraguai'): 21,
+    ('estados unidos','austrália'): 22,
+    ('turquia','estados unidos'): 23,
+    ('paraguai','austrália'): 24,
+    # GRUPO E
+    ('alemanha','curaçau'): 25,
+    ('costa do marfim','equador'): 26,
+    ('alemanha','costa do marfim'): 27,
+    ('equador','curaçau'): 28,
+    ('equador','alemanha'): 29,
+    ('curaçau','costa do marfim'): 30,
+    # GRUPO F
+    ('holanda','japão'): 31,
+    ('suécia','tunísia'): 32,
+    ('tunísia','japão'): 33,
+    ('holanda','suécia'): 34,
+    ('japão','suécia'): 35,
+    ('tunísia','holanda'): 36,
+    # GRUPO G
+    ('bélgica','egito'): 37,
+    ('irã','nova zelândia'): 38,
+    ('bélgica','irã'): 39,
+    ('nova zelândia','egito'): 40,
+    ('egito','irã'): 41,
+    ('nova zelândia','bélgica'): 42,
+    # GRUPO H
+    ('espanha','cabo verde'): 43,
+    ('arábia saudita','uruguai'): 44,
+    ('espanha','arábia saudita'): 45,
+    ('uruguai','cabo verde'): 46,
+    ('cabo verde','arábia saudita'): 47,
+    ('uruguai','espanha'): 48,
+    # GRUPO I
+    ('frança','senegal'): 49,
+    ('iraque','noruega'): 50,
+    ('frança','iraque'): 51,
+    ('noruega','senegal'): 52,
+    ('noruega','frança'): 53,
+    ('senegal','iraque'): 54,
+    # GRUPO J
+    ('argentina','argélia'): 55,
+    ('áustria','jordânia'): 56,
+    ('argentina','áustria'): 57,
+    ('jordânia','argélia'): 58,
+    ('argélia','áustria'): 59,
+    ('jordânia','argentina'): 60,
+    # GRUPO K
+    ('portugal','rep. do congo'): 61,
+    ('uzbequistão','colômbia'): 62,
+    ('portugal','uzbequistão'): 63,
+    ('colômbia','rep. do congo'): 64,
+    ('colômbia','portugal'): 65,
+    ('rep. do congo','uzbequistão'): 66,
+    # GRUPO L
+    ('inglaterra','croácia'): 67,
+    ('gana','panamá'): 68,
+    ('inglaterra','gana'): 69,
+    ('panamá','croácia'): 70,
+    ('panamá','inglaterra'): 71,
+    ('croácia','gana'): 72,
 }
-def pt(n):
-    if not n: return ''
-    return NM.get(str(n).lower().strip(), str(n).strip())
 
-# ── Ordem dos jogos 1-72 ──────────────────────────────────────────
-GROUP_ORDER = [
-    ('México','África do Sul'),('Coréia do Sul','República Tcheca'),
-    ('República Tcheca','África do Sul'),('México','Coréia do Sul'),
-    ('República Tcheca','México'),('África do Sul','Coréia do Sul'),
-    ('Canadá','Bósnia e Herzegovina'),('Catar','Suíça'),
-    ('Suíça','Bósnia e Herzegovina'),('Canadá','Catar'),
-    ('Suíça','Canadá'),('Bósnia e Herzegovina','Catar'),
-    ('Brasil','Marrocos'),('Haiti','Escócia'),
-    ('Escócia','Marrocos'),('Brasil','Haiti'),
-    ('Escócia','Brasil'),('Marrocos','Haiti'),
-    ('Estados Unidos','Paraguai'),('Austrália','Turquia'),
-    ('Turquia','Paraguai'),('Estados Unidos','Austrália'),
-    ('Turquia','Estados Unidos'),('Paraguai','Austrália'),
-    ('Alemanha','Curaçau'),('Costa do Marfim','Equador'),
-    ('Alemanha','Costa do Marfim'),('Equador','Curaçau'),
-    ('Equador','Alemanha'),('Curaçau','Costa do Marfim'),
-    ('Holanda','Japão'),('Suécia','Tunísia'),
-    ('Tunísia','Japão'),('Holanda','Suécia'),
-    ('Japão','Suécia'),('Tunísia','Holanda'),
-    ('Bélgica','Egito'),('Irã','Nova Zelândia'),
-    ('Bélgica','Irã'),('Nova Zelândia','Egito'),
-    ('Egito','Irã'),('Nova Zelândia','Bélgica'),
-    ('Espanha','Cabo Verde'),('Arábia Saudita','Uruguai'),
-    ('Espanha','Arábia Saudita'),('Uruguai','Cabo Verde'),
-    ('Cabo Verde','Arábia Saudita'),('Uruguai','Espanha'),
-    ('França','Senegal'),('Iraque','Noruega'),
-    ('França','Iraque'),('Noruega','Senegal'),
-    ('Noruega','França'),('Senegal','Iraque'),
-    ('Argentina','Argélia'),('Áustria','Jordânia'),
-    ('Argentina','Áustria'),('Jordânia','Argélia'),
-    ('Argélia','Áustria'),('Jordânia','Argentina'),
-    ('Portugal','Rep. do Congo'),('Uzbequistão','Colômbia'),
-    ('Portugal','Uzbequistão'),('Colômbia','Rep. do Congo'),
-    ('Colômbia','Portugal'),('Rep. do Congo','Uzbequistão'),
-    ('Inglaterra','Croácia'),('Gana','Panamá'),
-    ('Inglaterra','Gana'),('Panamá','Croácia'),
-    ('Panamá','Inglaterra'),('Croácia','Gana'),
-]
+# Nomes alternativos que as APIs podem retornar → nome padrão em português
+ALIAS = {
+    'mexico':'méxico', 'south africa':'áfrica do sul',
+    'south korea':'coréia do sul', 'korea republic':'coréia do sul',
+    'republic of korea':'coréia do sul', 'korea, republic of':'coréia do sul',
+    'czech republic':'república tcheca', 'czechia':'república tcheca',
+    'canada':'canadá', 'bosnia and herzegovina':'bósnia e herzegovina',
+    'bosnia':'bósnia e herzegovina', 'qatar':'catar', 'switzerland':'suíça',
+    'brazil':'brasil', 'morocco':'marrocos', 'haiti':'haiti', 'scotland':'escócia',
+    'usa':'estados unidos', 'united states':'estados unidos',
+    'united states of america':'estados unidos',
+    'paraguay':'paraguai', 'australia':'austrália',
+    'turkey':'turquia', 'türkiye':'turquia',
+    'germany':'alemanha', 'curacao':'curaçau', 'curaçao':'curaçau',
+    "côte d'ivoire":'costa do marfim', 'ivory coast':'costa do marfim',
+    "cote d'ivoire":'costa do marfim',
+    'ecuador':'equador', 'netherlands':'holanda', 'japan':'japão',
+    'sweden':'suécia', 'tunisia':'tunísia', 'belgium':'bélgica',
+    'egypt':'egito', 'iran':'irã', 'new zealand':'nova zelândia',
+    'spain':'espanha', 'cape verde':'cabo verde',
+    'saudi arabia':'arábia saudita', 'uruguay':'uruguai',
+    'france':'frança', 'senegal':'senegal', 'iraq':'iraque',
+    'norway':'noruega', 'argentina':'argentina', 'algeria':'argélia',
+    'austria':'áustria', 'jordan':'jordânia', 'portugal':'portugal',
+    'dr congo':'rep. do congo', 'democratic republic of congo':'rep. do congo',
+    'congo dr':'rep. do congo', 'congo, democratic republic of the':'rep. do congo',
+    'uzbekistan':'uzbequistão', 'colombia':'colômbia',
+    'england':'inglaterra', 'croatia':'croácia', 'ghana':'gana', 'panama':'panamá',
+}
 
-def match_num(t1, t2):
-    for i,(a,b) in enumerate(GROUP_ORDER,1):
-        if (a.lower()==t1.lower() and b.lower()==t2.lower()) or \
-           (b.lower()==t1.lower() and a.lower()==t2.lower()):
-            return i
-    return None
+def pt(name):
+    """Converte nome para português padrão."""
+    if not name: return ''
+    s = str(name).lower().strip()
+    return ALIAS.get(s, str(name).strip())
 
-# ── Fonte 1: worldcup26.ir ────────────────────────────────────────
+def get_game_num(t1_pt, t2_pt):
+    """Retorna número do jogo pela tabela fixa, ou None para mata-mata."""
+    k1 = (t1_pt.lower(), t2_pt.lower())
+    k2 = (t2_pt.lower(), t1_pt.lower())
+    return GAME_MAP.get(k1) or GAME_MAP.get(k2)
+
+# ─── Fonte 1: worldcup26.ir ───────────────────────────────────────
 def fetch_worldcup26():
     print("  → worldcup26.ir ...")
     try:
         r = requests.get('https://worldcup26.ir/get/games',
             headers={'User-Agent':'Mozilla/5.0','Accept':'application/json'},
             timeout=TIMEOUT)
-        print(f"    Status: {r.status_code}")
+        print(f"    HTTP {r.status_code}")
         if not r.ok: return None
         raw = r.json()
-        print(f"    Tipo resposta: {type(raw)}, keys: {list(raw.keys()) if isinstance(raw,dict) else 'lista'}")
         games = raw if isinstance(raw,list) else raw.get('games', raw.get('data', raw.get('matches',[])))
-        print(f"    Total jogos na resposta: {len(games)}")
-
         results = []
         for g in games:
-            # Tenta todos os campos possíveis de placar
-            s1 = (g.get('home_score') or g.get('score1') or
-                  g.get('homeScore') or g.get('home_goals') or
-                  g.get('team1_goals'))
-            s2 = (g.get('away_score') or g.get('score2') or
-                  g.get('awayScore') or g.get('away_goals') or
-                  g.get('team2_goals'))
+            # Verificar status — só jogos finalizados
+            status = str(g.get('status','') or g.get('state','')).lower()
+            finished = status in ('finished','ft','full time','fulltime','ended','fim','encerrado','completed')
+            
+            s1 = g.get('home_score') if g.get('home_score') is not None else \
+                 g.get('score1') if g.get('score1') is not None else \
+                 g.get('homeScore') if g.get('homeScore') is not None else None
+            s2 = g.get('away_score') if g.get('away_score') is not None else \
+                 g.get('score2') if g.get('score2') is not None else \
+                 g.get('awayScore') if g.get('awayScore') is not None else None
+            
             if s1 is None or s2 is None: continue
+            if not finished: continue  # CRÍTICO: só jogos finalizados
 
-            # Tenta todos os campos de nome de time
-            def get_team(prefix, alt_key):
-                t = g.get(prefix+'_team') or g.get(alt_key) or {}
+            def team_name(prefix, alt):
+                t = g.get(f'{prefix}_team') or g.get(alt) or {}
                 if isinstance(t, dict):
                     return t.get('name_en') or t.get('name') or ''
                 return str(t) if t else ''
-
-            home = get_team('home','team1')
-            away = get_team('away','team2')
+            
+            home = team_name('home','team1')
+            away = team_name('away','team2')
             if not home or not away: continue
-
             results.append({'t1':pt(home),'t2':pt(away),'g1':int(s1),'g2':int(s2)})
-
-        print(f"    ✅ {len(results)} jogos com placar")
+        
+        print(f"    ✅ {len(results)} jogos finalizados")
         return results if results else None
     except Exception as e:
-        print(f"    ❌ Erro: {e}")
+        print(f"    ❌ {e}")
         return None
 
-# ── Fonte 2: Sofascore ────────────────────────────────────────────
+# ─── Fonte 2: Sofascore ───────────────────────────────────────────
 SF = {'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
       'Accept':'application/json','Referer':'https://www.sofascore.com/'}
 
@@ -146,8 +204,7 @@ def fetch_sofascore():
                       seasons[0] if seasons else None)
         if not season: return None
         sid = season['id']
-        print(f"    Season ID: {sid}")
-
+        print(f"    Season: {sid}")
         results = []
         for page in range(20):
             r = requests.get(
@@ -156,6 +213,7 @@ def fetch_sofascore():
             if not r.ok: break
             data = r.json()
             for ev in data.get('events',[]):
+                # Apenas status 'finished' — nunca 'inprogress' ou 'notstarted'
                 if ev.get('status',{}).get('type') != 'finished': continue
                 hs = ev.get('homeScore',{}).get('current')
                 aws = ev.get('awayScore',{}).get('current')
@@ -166,14 +224,13 @@ def fetch_sofascore():
                     'g1': hs, 'g2': aws
                 })
             if not data.get('hasNextPage',False): break
-
         print(f"    ✅ {len(results)} jogos")
         return results if results else None
     except Exception as e:
-        print(f"    ❌ Erro: {e}")
+        print(f"    ❌ {e}")
         return None
 
-# ── Fonte 3: openfootball ─────────────────────────────────────────
+# ─── Fonte 3: openfootball ────────────────────────────────────────
 def fetch_openfootball():
     print("  → openfootball ...")
     try:
@@ -183,64 +240,71 @@ def fetch_openfootball():
         if not r.ok: return None
         results = []
         for m in r.json().get('matches',[]):
+            # openfootball só tem placares quando jogo terminou
             if m.get('score1') is None or m.get('score2') is None: continue
-            results.append({'t1':pt(m['team1']),'t2':pt(m['team2']),
-                           'g1':m['score1'],'g2':m['score2']})
+            results.append({
+                't1':pt(m.get('team1','')),
+                't2':pt(m.get('team2','')),
+                'g1':m['score1'],'g2':m['score2']
+            })
         print(f"    ✅ {len(results)} jogos")
         return results if results else None
     except Exception as e:
-        print(f"    ❌ Erro: {e}")
+        print(f"    ❌ {e}")
         return None
 
-# ── Monta rows do Supabase ────────────────────────────────────────
+# ─── Converte resultados → linhas Supabase ────────────────────────
 def build_rows(raw):
     rows = {}
     ko_num = 72
     seen_ko = {}
+    now = datetime.now(timezone.utc).isoformat()
+    
     for r in raw:
         t1,t2,g1,g2 = r['t1'],r['t2'],r['g1'],r['g2']
         if not t1 or not t2: continue
-        n = match_num(t1,t2)
+        
+        n = get_game_num(t1, t2)
         if n:
-            rows[n] = {'jogo_num':n,'time1':t1,'gols1':g1,'time2':t2,'gols2':g2,
-                       'atualizado_em':datetime.now(timezone.utc).isoformat()}
+            # Fase de grupos: número fixo
+            rows[n] = {'jogo_num':n,'time1':t1,'gols1':g1,'time2':t2,'gols2':g2,'atualizado_em':now}
+            print(f"    Jogo {n:3d}: {t1} {g1}–{g2} {t2}")
         else:
+            # Mata-mata: numera sequencialmente a partir de 73
             key = tuple(sorted([t1.lower(),t2.lower()]))
             if key not in seen_ko:
                 ko_num += 1
                 seen_ko[key] = ko_num
             n = seen_ko[key]
-            rows[n] = {'jogo_num':n,'time1':t1,'gols1':g1,'time2':t2,'gols2':g2,
-                       'atualizado_em':datetime.now(timezone.utc).isoformat()}
+            rows[n] = {'jogo_num':n,'time1':t1,'gols1':g1,'time2':t2,'gols2':g2,'atualizado_em':now}
+            print(f"    Jogo {n:3d}: {t1} {g1}–{g2} {t2} (mata-mata)")
+    
     return list(rows.values())
 
-# ── Supabase upsert ───────────────────────────────────────────────
+# ─── Supabase upsert ──────────────────────────────────────────────
 def save(rows):
-    url = f"{SUPABASE_URL}/rest/v1/resultados"
     headers = {
         'apikey': SUPABASE_KEY,
         'Authorization': f'Bearer {SUPABASE_KEY}',
         'Content-Type': 'application/json',
         'Prefer': 'resolution=merge-duplicates,return=minimal',
     }
-    # Send in batches of 50
     for i in range(0, len(rows), 50):
         batch = rows[i:i+50]
-        r = requests.post(url, headers=headers, json=batch, timeout=30)
+        r = requests.post(f"{SUPABASE_URL}/rest/v1/resultados",
+                          headers=headers, json=batch, timeout=30)
         if not r.ok:
             print(f"❌ Supabase {r.status_code}: {r.text[:300]}")
             sys.exit(1)
     print(f"✅ {len(rows)} resultados salvos no Supabase")
 
-# ── Main ──────────────────────────────────────────────────────────
+# ─── Main ─────────────────────────────────────────────────────────
 def main():
     now = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')
-    print(f"\n{'='*50}")
-    print(f"  Copa 2026 — Atualização: {now}")
-    print(f"{'='*50}\n")
+    print(f"\n{'='*50}\n  Copa 2026 — {now}\n{'='*50}\n")
 
     if not SUPABASE_URL or not SUPABASE_KEY:
-        print("❌ SUPABASE_URL / SUPABASE_KEY não definidos nos Secrets do GitHub")
+        print("❌ SUPABASE_URL / SUPABASE_KEY não definidos")
         sys.exit(1)
     print(f"✅ Supabase: {SUPABASE_URL}\n")
 
@@ -248,15 +312,17 @@ def main():
     raw = fetch_worldcup26() or fetch_sofascore() or fetch_openfootball()
 
     if not raw:
-        print("\n⚠️  Nenhuma fonte retornou dados — normal se ainda não houve jogos.")
+        print("⚠️  Nenhuma fonte retornou dados finalizados.")
         sys.exit(0)
 
+    print(f"\n📊 Processando {len(raw)} resultados:")
     rows = build_rows(raw)
-    print(f"\n📊 {len(rows)} jogos para salvar")
+
     if not rows:
-        print("⚠️  Nenhum jogo válido.")
+        print("⚠️  Nenhum jogo mapeado para número de jogo.")
         sys.exit(0)
 
+    print(f"\n💾 Salvando {len(rows)} jogos no Supabase...")
     save(rows)
     print("✅ Concluído!")
 
