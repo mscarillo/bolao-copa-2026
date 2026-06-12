@@ -937,13 +937,16 @@ function parseXLSX(wb, fname){
 }
 
 // ── File upload ───────────────────────────────────────────────────
-const dropz = document.getElementById('dropz');
-const filein = document.getElementById('filein');
-dropz.addEventListener('dragover',e=>{e.preventDefault();dropz.classList.add('drag')});
-dropz.addEventListener('dragleave',()=>dropz.classList.remove('drag'));
-dropz.addEventListener('drop',e=>{e.preventDefault();dropz.classList.remove('drag');handleFiles(Array.from(e.dataTransfer.files))});
-dropz.addEventListener('click',()=>filein.click());
-filein.addEventListener('change',e=>{handleFiles(Array.from(e.target.files));filein.value='';});
+function initDropzone(){
+  const dropz = document.getElementById('dropz');
+  const filein = document.getElementById('filein');
+  if(!dropz||!filein) return;
+  dropz.addEventListener('dragover',e=>{e.preventDefault();dropz.classList.add('drag')});
+  dropz.addEventListener('dragleave',()=>dropz.classList.remove('drag'));
+  dropz.addEventListener('drop',e=>{e.preventDefault();dropz.classList.remove('drag');handleFiles(Array.from(e.dataTransfer.files))});
+  dropz.addEventListener('click',()=>filein.click());
+  filein.addEventListener('change',e=>{handleFiles(Array.from(e.target.files));filein.value='';});
+}
 
 function handleFiles(files){
   files.filter(f=>f.name.match(/\.(xlsx|xls)$/i)).forEach(f=>{
@@ -956,7 +959,7 @@ function handleFiles(files){
           const i=localFiles.findIndex(x=>x.nome===p.nome);
           if(i>=0) localFiles[i]=p; else localFiles.push(p);
           renderChips();
-          document.getElementById('btnUpload').disabled=false;
+          const upBtn=document.getElementById('btnUpload'); if(upBtn) upBtn.disabled=false;
         }
       }catch(err){showErr('Erro em '+f.name+': '+err.message)}
     };
@@ -970,7 +973,7 @@ function renderChips(){
       <span>${p.nome} <span style="color:var(--muted);font-size:11px">(${Object.keys(p.jogos).length})</span></span>
       <span class="crm" onclick="rmLocal(${i})">✕</span>
     </div>`).join('');
-  document.getElementById('btnUpload').disabled = !localFiles.length;
+  const bu=document.getElementById('btnUpload'); if(bu) bu.disabled=!localFiles.length;
 }
 function rmLocal(i){localFiles.splice(i,1);renderChips();}
 function clearLocal(){localFiles=[];renderChips();}
@@ -1008,7 +1011,8 @@ async function uploadAll(){
   if(!localFiles.length) return;
   const btn=document.getElementById('btnUpload');
   const st=document.getElementById('upStatus');
-  btn.disabled=true; st.textContent='Enviando…'; st.style.color='var(--muted)';
+  if(btn) btn.disabled=true;
+  if(st){st.textContent='Enviando…'; st.style.color='var(--text3)';}
   try{
     // For each file: delete existing record by nome, then insert fresh
     for(const p of localFiles){
@@ -1024,8 +1028,7 @@ async function uploadAll(){
         atualizado_em: new Date().toISOString()
       }]);
     }
-    st.textContent=`✅ ${localFiles.length} participante(s) enviados!`;
-    st.style.color='var(--green)';
+    if(st){st.textContent=`✅ ${localFiles.length} participante(s) enviados!`;st.style.color='var(--green)';}
     await loadPlayers();
     calcRanking();
     navToId('ranking');
@@ -1033,10 +1036,10 @@ async function uploadAll(){
     clearLocal();
   }catch(e){
     showErr('Erro ao enviar: '+e.message);
-    st.textContent='';
+    if(st) st.textContent='';
   }finally{
-    btn.disabled=!localFiles.length;
-    setTimeout(()=>{if(st.textContent.startsWith('✅'))st.textContent='';},4000);
+    if(btn) btn.disabled=!localFiles.length;
+    setTimeout(()=>{if(st&&st.textContent.startsWith('✅'))st.textContent='';},4000);
   }
 }
 
@@ -1165,6 +1168,7 @@ function checkPwd(){
     document.getElementById('btnAdmin').style.display='none';
     navToId('admin');
     document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t.textContent.includes('Admin')));
+    initDropzone();
     renderGab();
   } else {
     document.getElementById('pwdErr').textContent='Senha incorreta.';
