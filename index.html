@@ -327,7 +327,16 @@ nav{background:var(--bg2);border-bottom:2px solid var(--green2);padding:0 20px;
 const ADMIN_PWD = 'copa2026';  // <<< TROQUE A SENHA AQUI
 // ================================================================
 
-const SQL_CREATE = `CREATE TABLE IF NOT EXISTS palpites (
+const SQL_CREATE = `-- Remove policies if they exist
+DROP POLICY IF EXISTS "rd_palpites"      ON palpites;
+DROP POLICY IF EXISTS "ins_palpites"     ON palpites;
+DROP POLICY IF EXISTS "up_palpites"      ON palpites;
+DROP POLICY IF EXISTS "del_palpites"     ON palpites;
+DROP POLICY IF EXISTS "rd_resultados"    ON resultados;
+DROP POLICY IF EXISTS "all_resultados"   ON resultados;
+
+-- Tables
+CREATE TABLE IF NOT EXISTS palpites (
   id            BIGSERIAL PRIMARY KEY,
   nome          TEXT NOT NULL,
   contato       TEXT,
@@ -343,13 +352,19 @@ CREATE TABLE IF NOT EXISTS resultados (
   gols2         INT,
   atualizado_em TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- RLS
 ALTER TABLE palpites  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE resultados ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "rd_palpites"  ON palpites  FOR SELECT USING (true);
-CREATE POLICY "rd_resultados" ON resultados FOR SELECT USING (true);
-CREATE POLICY "ins_palpites" ON palpites  FOR INSERT WITH CHECK (true);
-CREATE POLICY "up_palpites"  ON palpites  FOR UPDATE USING (true);
-CREATE POLICY "all_resultados" ON resultados FOR ALL USING (true);`;
+
+-- Policies: full anon access
+CREATE POLICY "rd_palpites"   ON palpites   FOR SELECT TO anon USING (true);
+CREATE POLICY "ins_palpites"  ON palpites   FOR INSERT TO anon WITH CHECK (true);
+CREATE POLICY "up_palpites"   ON palpites   FOR UPDATE TO anon USING (true);
+CREATE POLICY "del_palpites"  ON palpites   FOR DELETE TO anon USING (true);
+CREATE POLICY "all_resultados" ON resultados FOR ALL   TO anon USING (true) WITH CHECK (true);
+
+NOTIFY pgrst, 'reload schema';`;
 
 // ── Name map ──────────────────────────────────────────────────────
 const NM={
@@ -841,22 +856,26 @@ async function uploadAll(){
   const st=document.getElementById('upStatus');
   btn.disabled=true; st.textContent='Enviando…'; st.style.color='var(--muted)';
   try{
-    const rows=localFiles.map(p=>({
-      nome:p.nome,contato:p.contato||'',
-      jogos:p.jogos,bonus:p.bonus,
-      atualizado_em:new Date().toISOString()
-    }));
-    await sbReq('POST','/palpites',rows);
-    st.textContent=`✅ ${rows.length} participante(s) enviados!`;
+    // For each file: delete existing record by nome, then insert fresh
+    for(const p of localFiles){
+      // Delete duplicates by nome (URL-encode the name)
+      const nomeFilt = encodeURIComponent(p.nome);
+      await sbReq('DELETE', `/palpites?nome=eq.${nomeFilt}`);
+      // Insert fresh record
+      await sbReq('POST', '/palpites', [{
+        nome: p.nome,
+        contato: p.contato||'',
+        jogos: p.jogos,
+        bonus: p.bonus,
+        atualizado_em: new Date().toISOString()
+      }]);
+    }
+    st.textContent=`✅ ${localFiles.length} participante(s) enviados!`;
     st.style.color='var(--green)';
-    // Reload players and show ranking immediately
     await loadPlayers();
     calcRanking();
-    // Switch to ranking tab so user can see the result
     navToId('ranking');
     document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('on',i===0));
-    await loadPlayers();
-    calcRanking();
     clearLocal();
   }catch(e){
     showErr('Erro ao enviar: '+e.message);
