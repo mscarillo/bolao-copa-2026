@@ -741,36 +741,45 @@ async function testConn(){
 
 // ── Load all ──────────────────────────────────────────────────────
 async function reloadAll(){
-  syncCfg(); // ensure globals match localStorage
+  syncCfg();
   const icon = document.getElementById('reficon');
-  icon.classList.add('spin');
+  if(icon) icon.classList.add('spin');
   setBadge(false,'Carregando…');
   try{
-    // 1. Tenta buscar do Supabase (independente um do outro)
+    // Load gab and players independently — one failing doesn't block the other
     const [gabOk, playersOk] = await Promise.allSettled([
       loadGab(),
       loadPlayers()
     ]);
 
-    // 2. Sempre busca da API externa (não bloqueia se falhar)
-    await loadAPIResults().catch(()=>{});
+    // Log errors for debugging
+    if(gabOk.status==='rejected')    console.warn('[reloadAll] loadGab failed:', gabOk.reason);
+    if(playersOk.status==='rejected') console.warn('[reloadAll] loadPlayers failed:', playersOk.reason);
+    console.log('[reloadAll] players:', players.length, '| gab:', Object.keys(gab).length);
 
+    // Always render ranking (even with 0 results — shows participants)
     calcRanking();
-    if(document.getElementById('pjogos').classList.contains('on')) renderJogos();
+
+    // Update jogos tab if active
+    const pj = document.getElementById('pjogos');
+    if(pj && pj.classList.contains('on')) renderJogos();
 
     const nRes = Object.keys(gab).length;
     const nPlayers = players.length;
     if(!sbUrl||!sbKey){
-      setBadge(false,'Supabase não configurado');
-    } else if(gabOk.status==='rejected'){
-      setBadge(false,'Erro: '+gabOk.reason?.message);
+      setBadge(false,'Supabase não configurado — configure em Admin');
+    } else if(playersOk.status==='rejected'){
+      setBadge(false,'Erro ao carregar dados: '+playersOk.reason?.message);
     } else {
-      setBadge(true, `${nRes} resultados • ${nPlayers} participantes`);
+      setBadge(true, nPlayers>0
+        ? `${nPlayers} participantes • ${nRes} resultados`
+        : 'Conectado — sem participantes ainda');
     }
   }catch(e){
+    console.error('[reloadAll]', e);
     setBadge(false,'Erro: '+e.message);
   }finally{
-    icon.classList.remove('spin');
+    if(icon) icon.classList.remove('spin');
   }
 }
 
@@ -794,9 +803,10 @@ async function loadPlayers(){
   if(!data) return;
   players = data.map(r=>({
     nome: r.nome, contato: r.contato||'',
-    jogos: typeof r.jogos==='string'?JSON.parse(r.jogos):r.jogos,
-    bonus: typeof r.bonus==='string'?JSON.parse(r.bonus):r.bonus,
+    jogos: typeof r.jogos==='string'?JSON.parse(r.jogos):(r.jogos||{}),
+    bonus: typeof r.bonus==='string'?JSON.parse(r.bonus):(r.bonus||{}),
   }));
+  console.log('[loadPlayers] loaded', players.length, 'players');
 }
 
 async function loadAPIResults(){
@@ -822,8 +832,7 @@ async function saveGab(){
   try{
     await sbReq('POST','/resultados',rows);
     const msg=document.getElementById('gabmsg');
-    msg.style.display='inline';
-    setTimeout(()=>msg.style.display='none',2500);
+    if(msg){msg.style.display='inline'; setTimeout(()=>msg.style.display='none',2500);}
     calcRanking();
   }catch(e){showErr('Erro ao salvar: '+e.message)}
 }
@@ -981,17 +990,16 @@ function clearLocal(){localFiles=[];renderChips();}
 async function deleteAllPlayers(){
   if(!confirm('Apagar TODOS os participantes do banco? Esta ação não pode ser desfeita.')) return;
   const st = document.getElementById('upStatus');
-  st.textContent = 'Apagando…'; st.style.color='var(--muted)';
+  if(st){st.textContent = 'Apagando…'; st.style.color='var(--text3)';}
   try{
     await sbReq('DELETE', '/palpites?id=gt.0');
     players = [];
     calcRanking();
-    st.textContent = '✅ Todos os participantes apagados.';
-    st.style.color = 'var(--green)';
-    setTimeout(()=>st.textContent='', 4000);
+    if(st){st.textContent = '✅ Apagados.'; st.style.color = 'var(--green)';}
+    setTimeout(()=>{if(st)st.textContent='';}, 3000);
   }catch(e){
     showErr('Erro ao apagar: '+e.message);
-    st.textContent='';
+    if(st) st.textContent='';
   }
 }
 
@@ -1066,8 +1074,10 @@ function scorePlayer(p){
 
 // ── Ranking ───────────────────────────────────────────────────────
 function calcRanking(){
+  const rankout = document.getElementById('rankout');
+  if(!rankout) return;
   if(!players.length){
-    document.getElementById('rankout').innerHTML=`<div class="empty">
+    rankout.innerHTML=`<div class="empty">
       <div style="font-size:44px">⚽</div>
       <h3>Ranking não disponível</h3>
       <p>O administrador ainda não carregou os palpites.</p></div>`;
@@ -1129,15 +1139,16 @@ function calcRanking(){
     </tr>`;
   }).join('')}
   </tbody></table>`;
-  document.getElementById('rankout').innerHTML=html;
+  rankout.innerHTML=html;
 }
 
 // ── Jogos ─────────────────────────────────────────────────────────
 function renderJogos(){
   const out=document.getElementById('jogosout');
+  if(!out) return;
   const empty=document.getElementById('emptyJogos');
-  if(!MATCHES.length){out.innerHTML='';empty.style.display='block';return}
-  empty.style.display='none';
+  if(!MATCHES.length){out.innerHTML='';if(empty)empty.style.display='block';return}
+  if(empty) empty.style.display='none';
   const phases={};
   for(const m of MATCHES)(phases[m.ph]=phases[m.ph]||[]).push(m);
   const played=Object.keys(gab).length;
@@ -1162,10 +1173,10 @@ function checkPwd(){
   if(v===ADMIN_PWD){
     isAdmin=true;
     closeOv('ovAdmin');
-    document.getElementById('tabAdmin').style.display='flex';
-    document.getElementById('admBadge').style.display='';
-    document.getElementById('btnLogout').style.display='';
-    document.getElementById('btnAdmin').style.display='none';
+    const ta=document.getElementById('tabAdmin'); if(ta) ta.style.display='flex';
+    const ab=document.getElementById('admBadge'); if(ab) ab.style.display='';
+    const bl=document.getElementById('btnLogout'); if(bl) bl.style.display='';
+    const ba=document.getElementById('btnAdmin'); if(ba) ba.style.display='none';
     navToId('admin');
     document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t.textContent.includes('Admin')));
     initDropzone();
@@ -1178,10 +1189,10 @@ function checkPwd(){
 }
 function doLogout(){
   isAdmin=false;
-  document.getElementById('tabAdmin').style.display='none';
-  document.getElementById('admBadge').style.display='none';
-  document.getElementById('btnLogout').style.display='none';
-  document.getElementById('btnAdmin').style.display='';
+  const ta2=document.getElementById('tabAdmin'); if(ta2) ta2.style.display='none';
+  const ab2=document.getElementById('admBadge'); if(ab2) ab2.style.display='none';
+  const bl2=document.getElementById('btnLogout'); if(bl2) bl2.style.display='none';
+  const ba2=document.getElementById('btnAdmin'); if(ba2) ba2.style.display='';
   navToId('ranking');
   document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('on',i===0));
 }
@@ -1219,6 +1230,7 @@ function closeOv(id){document.getElementById(id).classList.add('hide')}
 // ── SQL / copy ────────────────────────────────────────────────────
 function toggleSQL(){
   const b=document.getElementById('sqlBox');
+  if(!b) return;
   if(b.style.display==='none'){
     b.style.display='block';
     document.getElementById('sqlPre').textContent=SQL_CREATE;
@@ -1229,24 +1241,25 @@ function copySQL(){
     const t=document.createElement('textarea');t.value=SQL_CREATE;
     document.body.appendChild(t);t.select();document.execCommand('copy');document.body.removeChild(t);
   });
-  const m=document.getElementById('sqlCopied');m.style.display='inline';
-  setTimeout(()=>m.style.display='none',2500);
+  const m=document.getElementById('sqlCopied');
+  if(m){m.style.display='inline'; setTimeout(()=>m.style.display='none',2500);}
 }
 
 // ── Badge / PDF / Errors ──────────────────────────────────────────
 function setBadge(on,txt){
-  document.getElementById('apidot').className='dot '+(on?'dot-on':'dot-off');
+  const dot=document.getElementById('apidot');
   const el=document.getElementById('apitxt');
-  el.textContent=txt; el.style.color=on?'var(--green)':'var(--muted)';
+  if(dot) dot.className='dot '+(on?'dot-on':'dot-off');
+  if(el){el.textContent=txt; el.style.color=on?'var(--green)':'var(--text3)';}
 }
 function doPDF(){
-  document.getElementById('pdfhd').style.display='block';
+  const phd=document.getElementById('pdfhd'); if(phd) phd.style.display='block';
   document.getElementById('pdfdate').textContent=
     'Gerado em '+new Date().toLocaleString('pt-BR')+' • '+Object.keys(gab).length+' jogos avaliados';
   navToId('ranking');
   document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('on',i===0));
   window.print();
-  document.getElementById('pdfhd').style.display='none';
+  if(phd) phd.style.display='none';
 }
 function showErr(msg){
   const c=document.getElementById('errbox');if(!c)return;
