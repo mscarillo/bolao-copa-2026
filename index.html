@@ -471,6 +471,11 @@ function loadCfg(){
   sbKey = localStorage.getItem('sb_key')||'';
   updateCfgStatus();
 }
+// Sync globals whenever needed
+function syncCfg(){
+  sbUrl = localStorage.getItem('sb_url')||'';
+  sbKey = localStorage.getItem('sb_key')||'';
+}
 function updateCfgStatus(){
   const ok = !!(sbUrl && sbKey);
   const el = document.getElementById('cfgTxt');
@@ -489,20 +494,25 @@ function saveConfig(){
   closeOv('ovConfig');
   updateCfgStatus();
   reloadAll();
+  // Force sync in case any other function reads globals
+  syncCfg();
 }
 
 async function sbReq(method, path, body){
-  if(!sbUrl||!sbKey) throw new Error('Supabase não configurado');
+  // Always read fresh from localStorage to avoid stale globals
+  const url = sbUrl || localStorage.getItem('sb_url') || '';
+  const key = sbKey || localStorage.getItem('sb_key') || '';
+  if(!url || !key) throw new Error('Supabase não configurado. Acesse Admin → Configurar Supabase.');
   const headers = {
-    'apikey': sbKey,
-    'Authorization': 'Bearer '+sbKey,
+    'apikey': key,
+    'Authorization': 'Bearer '+key,
     'Content-Type': 'application/json',
   };
   if(method==='POST'||method==='PATCH')
     headers['Prefer'] = 'resolution=merge-duplicates,return=minimal';
   const opts = {method, headers};
   if(body) opts.body = JSON.stringify(body);
-  const r = await fetch(sbUrl+'/rest/v1'+path, opts);
+  const r = await fetch(url+'/rest/v1'+path, opts);
   if(!r.ok){
     let msg = '';
     try{ msg = JSON.stringify(await r.json()); }catch(e){ msg = await r.text().catch(()=>''); }
@@ -575,6 +585,7 @@ async function testConn(){
 
 // ── Load all ──────────────────────────────────────────────────────
 async function reloadAll(){
+  syncCfg(); // ensure globals match localStorage
   const icon = document.getElementById('reficon');
   icon.classList.add('spin');
   setBadge(false,'Carregando…');
@@ -838,6 +849,12 @@ async function uploadAll(){
     await sbReq('POST','/palpites',rows);
     st.textContent=`✅ ${rows.length} participante(s) enviados!`;
     st.style.color='var(--green)';
+    // Reload players and show ranking immediately
+    await loadPlayers();
+    calcRanking();
+    // Switch to ranking tab so user can see the result
+    navToId('ranking');
+    document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('on',i===0));
     await loadPlayers();
     calcRanking();
     clearLocal();
