@@ -514,76 +514,64 @@ async function sbReq(method, path, body){
 }
 
 async function testConn(){
-  // Limpa a chave: remove espaços, quebras de linha, e caracteres invisíveis
-  const u = document.getElementById('cfgUrl').value.trim().replace(/\/+$/,'');
-  const k = document.getElementById('cfgKey').value
-              .replace(/[\r\n\t]/g,'')   // remove quebras de linha e tabs
-              .replace(/\s+/g,'')           // remove todos os espaços
-              .trim();
-  const el = document.getElementById('testRes');
+  const rawU = document.getElementById('cfgUrl').value;
+  const rawK = document.getElementById('cfgKey').value;
+  const el   = document.getElementById('testRes');
 
-  if(!u||!k){el.textContent='⚠️ Preencha os campos primeiro.';el.style.color='orange';return}
+  // Limpa URL: remove espaços, barra final, e qualquer path
+  let u = rawU.trim();
+  // Remove qualquer coisa depois de .supabase.co
+  const m = u.match(/^(https:\/\/[a-z0-9]+\.supabase\.co)/i);
+  if(m) u = m[1];
+  else u = u.replace(/\/+$/,'');
 
-  // Mostra diagnóstico da chave antes de testar
-  const kLen = k.length;
-  const kStart = k.substring(0,12);
-  const kEnd = k.substring(k.length-6);
-  el.innerHTML=`Testando… (chave: ${kLen} chars, início: <code>${kStart}</code>…<code>${kEnd}</code>)`;
-  el.style.color='var(--muted)';
+  // Limpa chave: remove tudo que não seja base64url
+  const k = rawK.replace(/[^A-Za-z0-9+/=._-]/g,'').trim();
 
-  if(kLen < 100){
-    el.innerHTML=`❌ <b>Chave muito curta (${kLen} chars)</b> — a chave anon tem ~200 chars.<br><small>Copie novamente usando o botão <b>Copy</b> ao lado de "anon" no Supabase.</small>`;
-    el.style.color='var(--red)'; return;
+  if(!u || !k){
+    el.textContent='⚠️ Preencha os dois campos.';
+    el.style.color='orange'; return;
   }
 
-  const H = {'apikey':k,'Authorization':'Bearer '+k,'Content-Type':'application/json'};
+  const urlTest = u + '/rest/v1/palpites?select=id&limit=1';
+  el.innerHTML = `Testando…<br><small>URL: <code>${urlTest}</code><br>Chave: ${k.length} chars</small>`;
+  el.style.color = 'var(--muted)';
+
+  console.log('[testConn] URL:', urlTest);
+  console.log('[testConn] Key length:', k.length, '| start:', k.substring(0,20));
 
   try{
-    // Testa diretamente nas tabelas — endpoint correto para chave anon
-    const [r1, r2] = await Promise.all([
-      fetch(u+'/rest/v1/resultados?select=jogo_num&limit=1', {headers:H}),
-      fetch(u+'/rest/v1/palpites?select=id&limit=1', {headers:H})
-    ]);
+    const r = await fetch(urlTest, {
+      headers:{
+        'apikey': k,
+        'Authorization': 'Bearer ' + k,
+      }
+    });
 
-    if(r1.ok && r2.ok){
-      el.innerHTML='✅ <b>Conexão OK!</b> Tabelas acessíveis. Pode salvar!';
-      el.style.color='var(--green)';
-      document.getElementById('cfgKey').value = k; // salva chave limpa
+    const body = await r.text();
+    console.log('[testConn] Status:', r.status, '| Body:', body.slice(0,200));
+
+    if(r.ok){
+      el.innerHTML = '✅ <b>Conexão OK!</b> Pode salvar.';
+      el.style.color = 'var(--green)';
+      // Salva valores limpos
+      document.getElementById('cfgUrl').value = u;
+      document.getElementById('cfgKey').value = k;
       return;
     }
 
-    // Trata erros individuais
-    const s1=r1.status, s2=r2.status;
-    const b1=await r1.text().catch(()=>''), b2=await r2.text().catch(()=>'');
-
-    if(s1===401 || s2===401){
-      el.innerHTML=`❌ <b>Erro 401 — Chave inválida</b><br>
-        <small>A chave não tem permissão para acessar as tabelas.<br>
-        Verifique se as políticas RLS foram criadas corretamente.<br>
-        Execute no SQL Editor:<br>
-        <b>NOTIFY pgrst, 'reload schema';</b></small>`;
-      el.style.color='var(--red)'; return;
-    }
-
-    if(s1===404 || s2===404){
-      el.innerHTML=`⚠️ <b>Tabelas não encontradas (404)</b><br>
-        <small>Execute no SQL Editor do Supabase:<br>
-        <b>NOTIFY pgrst, 'reload schema';</b><br>
-        Aguarde 30s e tente novamente.</small>`;
-      el.style.color='orange'; return;
-    }
-
-    const body = b1||b2;
-    el.innerHTML=`❌ Erro inesperado (resultados:${s1}, palpites:${s2})<br>
-      <small><code>${body.slice(0,150)}</code></small>`;
-    el.style.color='var(--red)';
+    el.innerHTML = `❌ <b>Erro ${r.status}</b><br>
+      <small>URL chamada: <code>${urlTest}</code><br>
+      Resposta: <code>${body.slice(0,200)}</code></small>`;
+    el.style.color = 'var(--red)';
 
   }catch(e){
-    el.innerHTML=`❌ Erro de rede: ${e.message}<br>
-      <small>URL: <code>${u}</code></small>`;
-    el.style.color='var(--red)';
+    el.innerHTML = `❌ Erro de rede: ${e.message}`;
+    el.style.color = 'var(--red)';
   }
 }
+
+
 
 // ── Load all ──────────────────────────────────────────────────────
 async function reloadAll(){
