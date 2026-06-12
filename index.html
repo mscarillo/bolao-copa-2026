@@ -324,7 +324,7 @@ nav{background:var(--bg2);border-bottom:2px solid var(--green2);padding:0 20px;
 // ================================================================
 // CONFIGURACOES — EDITE AQUI ANTES DE PUBLICAR
 // ================================================================
-const ADMIN_PWD = 'brasil2026';  // <<< TROQUE A SENHA AQUI
+const ADMIN_PWD = 'copa2026';  // <<< TROQUE A SENHA AQUI
 // ================================================================
 
 const SQL_CREATE = `CREATE TABLE IF NOT EXISTS palpites (
@@ -514,44 +514,73 @@ async function sbReq(method, path, body){
 }
 
 async function testConn(){
+  // Limpa a chave: remove espaços, quebras de linha, e caracteres invisíveis
   const u = document.getElementById('cfgUrl').value.trim().replace(/\/+$/,'');
-  const k = document.getElementById('cfgKey').value.trim();
+  const k = document.getElementById('cfgKey').value
+              .replace(/[\r\n\t]/g,'')   // remove quebras de linha e tabs
+              .replace(/\s+/g,'')           // remove todos os espaços
+              .trim();
   const el = document.getElementById('testRes');
+
   if(!u||!k){el.textContent='⚠️ Preencha os campos primeiro.';el.style.color='orange';return}
-  el.textContent='Testando…';el.style.color='var(--muted)';
+
+  // Mostra diagnóstico da chave antes de testar
+  const kLen = k.length;
+  const kStart = k.substring(0,12);
+  const kEnd = k.substring(k.length-6);
+  el.innerHTML=`Testando… (chave: ${kLen} chars, início: <code>${kStart}</code>…<code>${kEnd}</code>)`;
+  el.style.color='var(--muted)';
+
+  if(kLen < 100){
+    el.innerHTML=`❌ <b>Chave muito curta (${kLen} chars)</b> — a chave anon tem ~200 chars.<br><small>Copie novamente usando o botão <b>Copy</b> ao lado de "anon" no Supabase.</small>`;
+    el.style.color='var(--red)'; return;
+  }
+
   const H = {'apikey':k,'Authorization':'Bearer '+k,'Content-Type':'application/json'};
+
   try{
-    // Passo 1: testa se o projeto Supabase responde (endpoint raiz)
     const r0 = await fetch(u+'/rest/v1/', {headers:H});
+
     if(r0.status===401){
-      el.innerHTML='❌ <b>Erro 401</b> — Chave anon incorreta ou expirada.<br><small>Copie novamente de: Supabase → Project Settings → API → anon public</small>';
+      const body = await r0.text().catch(()=>'');
+      el.innerHTML=`❌ <b>Erro 401</b> (chave ${kLen} chars)<br>
+        <small>Resposta do Supabase: <code>${body.slice(0,120)}</code><br>
+        Solução: no Supabase → SQL Editor → execute:<br>
+        <b>NOTIFY pgrst, 'reload schema';</b><br>
+        Depois aguarde 30s e tente novamente.</small>`;
       el.style.color='var(--red)'; return;
     }
-    if(!r0.ok && r0.status!==200){
-      el.innerHTML='❌ <b>Erro '+r0.status+'</b> — URL do projeto incorreta.<br><small>Verifique a Project URL no Supabase → Project Settings → API</small>';
+
+    if(!r0.ok){
+      el.innerHTML=`❌ <b>Erro ${r0.status}</b> — URL incorreta.<br><small>URL usada: <code>${u}</code></small>`;
       el.style.color='var(--red)'; return;
     }
-    // Passo 2: testa tabela resultados especificamente
+
+    // URL ok, testa as tabelas
     const r1 = await fetch(u+'/rest/v1/resultados?select=jogo_num&limit=1', {headers:H});
-    if(r1.ok){
-      el.innerHTML='✅ <b>Conexão OK!</b> Tabela <i>resultados</i> acessível. Pode salvar.';
-      el.style.color='var(--green)'; return;
+    const r2 = await fetch(u+'/rest/v1/palpites?select=id&limit=1', {headers:H});
+
+    if(r1.ok && r2.ok){
+      el.innerHTML='✅ <b>Conexão OK!</b> Ambas as tabelas acessíveis. Pode salvar!';
+      el.style.color='var(--green)';
+      // Salva automaticamente a chave limpa
+      document.getElementById('cfgKey').value = k;
+      return;
     }
-    if(r1.status===404){
-      // Passo 3: schema pode estar em cache — tenta recarregar via rpc
-      // e testa tabela palpites também
-      const r2 = await fetch(u+'/rest/v1/palpites?select=id&limit=1', {headers:H});
-      if(r2.ok){
-        el.innerHTML='⚠️ Tabela <i>palpites</i> OK mas <i>resultados</i> com 404.<br><small>Execute no SQL Editor: <b>NOTIFY pgrst, \'reload schema\';</b> e tente novamente.</small>';
-        el.style.color='orange'; return;
-      }
-      el.innerHTML='❌ <b>Tabelas não encontradas (404)</b><br><small>Execute no Supabase SQL Editor:<br><b>NOTIFY pgrst, \'reload schema\';</b><br>Aguarde 10 segundos e tente novamente.</small>';
-      el.style.color='var(--red)'; return;
+
+    const status1 = r1.status, status2 = r2.status;
+    if(status1===404 || status2===404){
+      el.innerHTML=`⚠️ Autenticação OK mas tabelas com 404 (resultados:${status1}, palpites:${status2})<br>
+        <small>Execute no SQL Editor do Supabase:<br>
+        <b>NOTIFY pgrst, 'reload schema';</b><br>Aguarde 30s e tente novamente.</small>`;
+      el.style.color='orange'; return;
     }
-    el.innerHTML='❌ Erro '+r1.status+': '+(await r1.text().catch(()=>'')).slice(0,120);
+
+    el.innerHTML=`❌ Erro inesperado: resultados=${status1}, palpites=${status2}`;
     el.style.color='var(--red)';
+
   }catch(e){
-    el.textContent='❌ Erro de rede: '+e.message;
+    el.innerHTML=`❌ Erro de rede: ${e.message}<br><small>Verifique se a URL está correta: <code>${u}</code></small>`;
     el.style.color='var(--red)';
   }
 }
