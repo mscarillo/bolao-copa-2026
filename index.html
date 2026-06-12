@@ -195,7 +195,11 @@ nav{background:var(--bg2);border-bottom:2px solid var(--green2);padding:0 24px;
     <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Anon Key (public)</label>
     <input type="text" id="cfgKey" placeholder="eyJhbGciOiJS...">
     <div class="modal-err" id="cfgErr" style="margin-top:6px"></div>
-    <div class="modal-row" style="margin-top:10px">
+    <div style="margin:8px 0">
+      <button class="btn btn-ghost" onclick="testConnection()" style="width:100%;justify-content:center;padding:9px;font-size:12px">🔌 Testar conexão antes de salvar</button>
+      <div id="testResult" style="font-size:12px;margin-top:6px;min-height:16px;text-align:center"></div>
+    </div>
+    <div class="modal-row" style="margin-top:6px">
       <button class="btn btn-ghost" onclick="closeModal('modalConfig')" style="flex:1;justify-content:center;padding:10px">Cancelar</button>
       <button class="btn btn-gold" onclick="saveConfig()" style="flex:1;justify-content:center">Salvar</button>
     </div>
@@ -487,17 +491,56 @@ function saveConfig(){
   updateConfigStatus();
   loadAll();
 }
+async function testConnection(){
+  const u = document.getElementById('cfgUrl').value.trim();
+  const k = document.getElementById('cfgKey').value.trim();
+  const el = document.getElementById('testResult');
+  if(!u || !k){ el.textContent='⚠️ Preencha os dois campos primeiro.'; el.style.color='orange'; return; }
+  el.textContent='Testando…'; el.style.color='var(--muted)';
+  try{
+    const r = await fetch(u+'/rest/v1/resultados?select=jogo_num&limit=1', {
+      headers:{
+        'apikey': k,
+        'Authorization': 'Bearer '+k,
+        'Content-Type': 'application/json'
+      }
+    });
+    if(r.ok){
+      el.textContent='✅ Conexão OK! Credenciais corretas.';
+      el.style.color='var(--green)';
+    } else {
+      const err = await r.json().catch(()=>({}));
+      if(r.status===401){
+        el.textContent='❌ Erro 401 — Chave inválida. Verifique a anon key.';
+      } else if(r.status===404){
+        el.textContent='❌ Erro 404 — Tabelas não criadas. Execute o SQL no Supabase.';
+      } else {
+        el.textContent='❌ Erro '+r.status+': '+(err.message||'');
+      }
+      el.style.color='var(--red)';
+    }
+  }catch(e){
+    el.textContent='❌ Erro de rede: '+e.message+'. Verifique a URL.';
+    el.style.color='var(--red)';
+  }
+}
 function updateConfigStatus(){
   const ok=sbUrl&&sbKey;
   document.getElementById('configStatus').textContent=ok?`✅ ${sbUrl.replace('https://','').split('.')[0]}.supabase.co`:'❌ Não configurado';
   document.getElementById('configStatus').style.color=ok?'var(--green)':'var(--red)';
 }
 async function sbFetch(path,opts={}){
-  if(!sbUrl||!sbKey) throw new Error('Supabase não configurado');
-  const r=await fetch(sbUrl+'/rest/v1'+path,{
-    headers:{'apikey':sbKey,'Authorization':'Bearer '+sbKey,
-      'Content-Type':'application/json','Prefer':'return=minimal',...(opts.headers||{})},
-    ...opts
+  if(!sbUrl||!sbKey) throw new Error('Supabase não configurado. Acesse Admin → Configurar Supabase.');
+  // Monta headers garantindo que apikey SEMPRE está presente
+  const baseHeaders = {
+    'apikey': sbKey,
+    'Authorization': 'Bearer ' + sbKey,
+    'Content-Type': 'application/json',
+    'Prefer': 'return=minimal',
+  };
+  const mergedHeaders = Object.assign({}, baseHeaders, opts.headers || {});
+  const fetchOpts = Object.assign({}, opts, { headers: mergedHeaders });
+  const r=await fetch(sbUrl+'/rest/v1'+path, fetchOpts
   });
   if(!r.ok){const t=await r.text().catch(()=>'');throw new Error(`Supabase ${r.status}: ${t}`)}
   const ct=r.headers.get('content-type')||'';
