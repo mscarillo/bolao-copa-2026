@@ -539,48 +539,48 @@ async function testConn(){
   const H = {'apikey':k,'Authorization':'Bearer '+k,'Content-Type':'application/json'};
 
   try{
-    const r0 = await fetch(u+'/rest/v1/', {headers:H});
-
-    if(r0.status===401){
-      const body = await r0.text().catch(()=>'');
-      el.innerHTML=`❌ <b>Erro 401</b> (chave ${kLen} chars)<br>
-        <small>Resposta do Supabase: <code>${body.slice(0,120)}</code><br>
-        Solução: no Supabase → SQL Editor → execute:<br>
-        <b>NOTIFY pgrst, 'reload schema';</b><br>
-        Depois aguarde 30s e tente novamente.</small>`;
-      el.style.color='var(--red)'; return;
-    }
-
-    if(!r0.ok){
-      el.innerHTML=`❌ <b>Erro ${r0.status}</b> — URL incorreta.<br><small>URL usada: <code>${u}</code></small>`;
-      el.style.color='var(--red)'; return;
-    }
-
-    // URL ok, testa as tabelas
-    const r1 = await fetch(u+'/rest/v1/resultados?select=jogo_num&limit=1', {headers:H});
-    const r2 = await fetch(u+'/rest/v1/palpites?select=id&limit=1', {headers:H});
+    // Testa diretamente nas tabelas — endpoint correto para chave anon
+    const [r1, r2] = await Promise.all([
+      fetch(u+'/rest/v1/resultados?select=jogo_num&limit=1', {headers:H}),
+      fetch(u+'/rest/v1/palpites?select=id&limit=1', {headers:H})
+    ]);
 
     if(r1.ok && r2.ok){
-      el.innerHTML='✅ <b>Conexão OK!</b> Ambas as tabelas acessíveis. Pode salvar!';
+      el.innerHTML='✅ <b>Conexão OK!</b> Tabelas acessíveis. Pode salvar!';
       el.style.color='var(--green)';
-      // Salva automaticamente a chave limpa
-      document.getElementById('cfgKey').value = k;
+      document.getElementById('cfgKey').value = k; // salva chave limpa
       return;
     }
 
-    const status1 = r1.status, status2 = r2.status;
-    if(status1===404 || status2===404){
-      el.innerHTML=`⚠️ Autenticação OK mas tabelas com 404 (resultados:${status1}, palpites:${status2})<br>
+    // Trata erros individuais
+    const s1=r1.status, s2=r2.status;
+    const b1=await r1.text().catch(()=>''), b2=await r2.text().catch(()=>'');
+
+    if(s1===401 || s2===401){
+      el.innerHTML=`❌ <b>Erro 401 — Chave inválida</b><br>
+        <small>A chave não tem permissão para acessar as tabelas.<br>
+        Verifique se as políticas RLS foram criadas corretamente.<br>
+        Execute no SQL Editor:<br>
+        <b>NOTIFY pgrst, 'reload schema';</b></small>`;
+      el.style.color='var(--red)'; return;
+    }
+
+    if(s1===404 || s2===404){
+      el.innerHTML=`⚠️ <b>Tabelas não encontradas (404)</b><br>
         <small>Execute no SQL Editor do Supabase:<br>
-        <b>NOTIFY pgrst, 'reload schema';</b><br>Aguarde 30s e tente novamente.</small>`;
+        <b>NOTIFY pgrst, 'reload schema';</b><br>
+        Aguarde 30s e tente novamente.</small>`;
       el.style.color='orange'; return;
     }
 
-    el.innerHTML=`❌ Erro inesperado: resultados=${status1}, palpites=${status2}`;
+    const body = b1||b2;
+    el.innerHTML=`❌ Erro inesperado (resultados:${s1}, palpites:${s2})<br>
+      <small><code>${body.slice(0,150)}</code></small>`;
     el.style.color='var(--red)';
 
   }catch(e){
-    el.innerHTML=`❌ Erro de rede: ${e.message}<br><small>Verifique se a URL está correta: <code>${u}</code></small>`;
+    el.innerHTML=`❌ Erro de rede: ${e.message}<br>
+      <small>URL: <code>${u}</code></small>`;
     el.style.color='var(--red)';
   }
 }
