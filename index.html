@@ -514,28 +514,42 @@ async function sbReq(method, path, body){
 }
 
 async function testConn(){
-  const u = document.getElementById('cfgUrl').value.trim();
+  const u = document.getElementById('cfgUrl').value.trim().replace(/\/+$/,'');
   const k = document.getElementById('cfgKey').value.trim();
   const el = document.getElementById('testRes');
   if(!u||!k){el.textContent='⚠️ Preencha os campos primeiro.';el.style.color='orange';return}
   el.textContent='Testando…';el.style.color='var(--muted)';
+  const H = {'apikey':k,'Authorization':'Bearer '+k,'Content-Type':'application/json'};
   try{
-    const r = await fetch(u+'/rest/v1/resultados?select=jogo_num&limit=1',{
-      headers:{'apikey':k,'Authorization':'Bearer '+k}
-    });
-    if(r.ok){
-      el.textContent='✅ Conexão OK! Pode salvar.';
-      el.style.color='var(--green)';
-    } else if(r.status===401){
-      el.textContent='❌ Erro 401 — Chave anon incorreta.';
-      el.style.color='var(--red)';
-    } else if(r.status===404){
-      el.textContent='❌ Erro 404 — Tabelas não criadas. Execute o SQL.';
-      el.style.color='var(--red)';
-    } else {
-      el.textContent=`❌ Erro ${r.status}`;
-      el.style.color='var(--red)';
+    // Passo 1: testa se o projeto Supabase responde (endpoint raiz)
+    const r0 = await fetch(u+'/rest/v1/', {headers:H});
+    if(r0.status===401){
+      el.innerHTML='❌ <b>Erro 401</b> — Chave anon incorreta ou expirada.<br><small>Copie novamente de: Supabase → Project Settings → API → anon public</small>';
+      el.style.color='var(--red)'; return;
     }
+    if(!r0.ok && r0.status!==200){
+      el.innerHTML='❌ <b>Erro '+r0.status+'</b> — URL do projeto incorreta.<br><small>Verifique a Project URL no Supabase → Project Settings → API</small>';
+      el.style.color='var(--red)'; return;
+    }
+    // Passo 2: testa tabela resultados especificamente
+    const r1 = await fetch(u+'/rest/v1/resultados?select=jogo_num&limit=1', {headers:H});
+    if(r1.ok){
+      el.innerHTML='✅ <b>Conexão OK!</b> Tabela <i>resultados</i> acessível. Pode salvar.';
+      el.style.color='var(--green)'; return;
+    }
+    if(r1.status===404){
+      // Passo 3: schema pode estar em cache — tenta recarregar via rpc
+      // e testa tabela palpites também
+      const r2 = await fetch(u+'/rest/v1/palpites?select=id&limit=1', {headers:H});
+      if(r2.ok){
+        el.innerHTML='⚠️ Tabela <i>palpites</i> OK mas <i>resultados</i> com 404.<br><small>Execute no SQL Editor: <b>NOTIFY pgrst, \'reload schema\';</b> e tente novamente.</small>';
+        el.style.color='orange'; return;
+      }
+      el.innerHTML='❌ <b>Tabelas não encontradas (404)</b><br><small>Execute no Supabase SQL Editor:<br><b>NOTIFY pgrst, \'reload schema\';</b><br>Aguarde 10 segundos e tente novamente.</small>';
+      el.style.color='var(--red)'; return;
+    }
+    el.innerHTML='❌ Erro '+r1.status+': '+(await r1.text().catch(()=>'')).slice(0,120);
+    el.style.color='var(--red)';
   }catch(e){
     el.textContent='❌ Erro de rede: '+e.message;
     el.style.color='var(--red)';
